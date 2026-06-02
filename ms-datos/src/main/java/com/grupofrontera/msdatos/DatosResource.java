@@ -4,13 +4,14 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import java.util.Map;
 
-@Path("/api/datos")
+@Path("/health")
 public class DatosResource {
 
     @GET
-    @Produces(MediaType.TEXT_PLAIN)
-    public String hello() {
-        return "Hello from Quarkus REST";
+    @Produces(MediaType.APPLICATION_JSON)
+    public Map<String, String> health() {
+        return Map.of("status", "UP", "service", "ms-datos");
     }
 }
