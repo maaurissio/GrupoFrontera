@@ -1,0 +1,1 @@
+-- Seed vacío — las credenciales se crean vía POST /auth/register (orquestado por el BFF)

@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  db-users:
+    image: postgres:16
+    container_name: pg-users
+    environment:
+      POSTGRES_USER: usuario_cordillera
+      POSTGRES_PASSWORD: cordillera_pass
+      POSTGRES_DB: db_users
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_users:/var/lib/postgresql/data
+    networks:
+      - cordillera-net
+
+  ms-users:
+    build: .
+    container_name: ms-users
+    depends_on:
+      - db-users
+    ports:
+      - "8082:8082"
+    environment:
+      QUARKUS_DATASOURCE_DB_KIND: postgresql
+      QUARKUS_DATASOURCE_USERNAME: usuario_cordillera
+      QUARKUS_DATASOURCE_PASSWORD: cordillera_pass
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://db-users:5432/db_users
+    networks:
+      - cordillera-net
+
+networks:
+  cordillera-net:
+    driver: bridge
+
+volumes:
+  pgdata_users:
