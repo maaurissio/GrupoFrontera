@@ -18,7 +18,7 @@ Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`,
 | `ms-kpis`     | KPI computation              | Scaffold                                                |
 | `ms-reportes` | Reporting                    | Scaffold                                                |
 | `bff`         | Backend-for-frontend         | Empty                                                   |
-| `front`       | Frontend                     | Empty                                                   |
+| `front`       | Frontend React + Vite + TS   | **En desarrollo** — estructura base, llamadas directas a ms-users/ms-auth |
 
 Java package convention: `com.grupofrontera.ms<name>` (e.g. `com.grupofrontera.msusers`). `groupId` is `com.grupofrontera`. Note: `ms-users/contexto_ms_users.md` documents the original design but is **stale on two points** — the real package is `com.grupofrontera.*` (not `cl.duoc.cordillera`) and the Quarkus platform version in `pom.xml` is `3.36.0` (not 3.34.5). Trust the code/POM over that doc.
 
@@ -124,3 +124,20 @@ POST /auth/register     → ms-auth:8081   → body: { usuarioId, email, passwor
 POST /auth/login        → ms-auth:8081   → returns { accessToken, refreshToken }
 POST /auth/validate     → ms-auth:8081   → header: Authorization: Bearer <token>
 ```
+
+## front — Frontend
+
+**Stack**: React 19 + Vite + TypeScript. Ubicado en `front/`. Sin BFF — llama directamente a ms-users y ms-auth.
+
+**Dev server**: `npm run dev` desde `front/` → `http://localhost:5173`
+
+**Decisión de arquitectura**: El BFF no es responsabilidad de este equipo. El frontend llama directo a los microservicios. El flujo de creación de usuario (ms-users → ms-auth) lo orquesta el frontend en dos pasos secuenciales hasta que exista un BFF.
+
+**CORS**: Habilitado en ms-users y ms-auth para `http://localhost:5173` (ver `application.properties` de cada servicio).
+
+### URLs de los servicios (desarrollo)
+
+| Variable          | Valor                    |
+|-------------------|--------------------------|
+| ms-auth base URL  | `http://localhost:8081`  |
+| ms-users base URL | `http://localhost:8082`  |
