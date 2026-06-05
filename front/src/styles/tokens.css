@@ -1,0 +1,268 @@
+/* ============================================================
+   CORDILLERA DESIGN SYSTEM — tokens.css
+   Plataforma de Monitoreo Gerencial · Grupo Cordillera
+   ============================================================ */
+
+/* ---------- FONTS (public/fonts/) ---------- */
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Thin.ttf") format("truetype"); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-ThinItalic.ttf") format("truetype"); font-weight: 100; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-ExtraLight.ttf") format("truetype"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-ExtraLightItalic.ttf") format("truetype"); font-weight: 200; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Light.ttf") format("truetype"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-LightItalic.ttf") format("truetype"); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Italic.ttf") format("truetype"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Medium.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-MediumItalic.ttf") format("truetype"); font-weight: 500; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-SemiBold.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-SemiBoldItalic.ttf") format("truetype"); font-weight: 600; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-BoldItalic.ttf") format("truetype"); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-ExtraBold.ttf") format("truetype"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-ExtraBoldItalic.ttf") format("truetype"); font-weight: 800; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Black.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-BlackItalic.ttf") format("truetype"); font-weight: 900; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Thin.ttf") format("truetype"); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-ThinItalic.ttf") format("truetype"); font-weight: 100; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-ExtraLight.ttf") format("truetype"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Light.ttf") format("truetype"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Italic.ttf") format("truetype"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Medium.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-SemiBold.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-ExtraBold.ttf") format("truetype"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Black.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-Thin.ttf") format("truetype"); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-ExtraLight.ttf") format("truetype"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-Light.ttf") format("truetype"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-Medium.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-SemiBold.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-ExtraBold.ttf") format("truetype"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/Inter_18pt-Black.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
+
+:root {
+  --bg-base:      #0F0F0F;
+  --bg-surface-1: #1A1A1A;
+  --bg-surface-2: #1E1E1E;
+  --bg-surface-3: #252525;
+  --bg-border:    #2A2A2A;
+  --bg-border-strong: #383838;
+
+  --text-primary:   #F0F0F0;
+  --text-secondary: #888888;
+  --text-disabled:  #444444;
+  --text-white:     #FFFFFF;
+
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger:  #EF4444;
+  --color-info:    #3B82F6;
+  --color-orange:  #F97316;
+  --color-yellow:  #EAB308;
+
+  --accent-fg:    #ffffff;
+  --accent-hover: #2563EB;
+
+  --success-bg: #14532D;  --success-border: #166534;
+  --warning-bg: #451A03;  --warning-border: #78350F;
+  --danger-bg:  #450A0A;  --danger-border:  #7F1D1D;
+  --info-bg:    #1E3A5F;  --info-border:    #1D4ED8;
+
+  --info-glow:    rgba(59, 130, 246, 0.14);
+  --success-glow: rgba(34, 197, 94, 0.14);
+  --warning-glow: rgba(245, 158, 11, 0.14);
+  --danger-glow:  rgba(239, 68, 68, 0.14);
+
+  --font-display: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold:600;
+  --fw-bold:    700;
+
+  --fs-display: 48px;
+  --fs-kpi:     34px;
+  --fs-h1:      28px;
+  --fs-h2:      22px;
+  --fs-h3:      17px;
+  --fs-body:    14px;
+  --fs-sm:      13px;
+  --fs-label:   12px;
+  --fs-micro:   11px;
+
+  --lh-tight: 1.05;
+  --lh-snug:  1.25;
+  --lh-base:  1.5;
+
+  --ls-tight:   -0.02em;
+  --ls-normal:  0;
+  --ls-wide:    0.04em;
+  --ls-eyebrow: 0.08em;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.45);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
+  --shadow-pop: 0 8px 24px rgba(0,0,0,0.6);
+  --ring-focus: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--color-info);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+
+  --chart-stroke:   #FFFFFF;
+  --chart-fill-0:   rgba(255,255,255,0.10);
+  --chart-fill-100: rgba(255,255,255,0);
+  --chart-axis:     #444444;
+  --chart-grid:     #2A2A2A;
+
+  --link-fg: var(--color-info);
+}
+
+[data-theme="light"] {
+  --bg-base:      #EEECE9;
+  --bg-surface-1: #E5E3DF;
+  --bg-surface-2: #F6F5F3;
+  --bg-surface-3: #DEDAD5;
+  --bg-border:    #CCCAC5;
+  --bg-border-strong: #A9A59E;
+
+  --text-primary:   #1A1916;
+  --text-secondary: #68645B;
+  --text-disabled:  #A8A49C;
+  --text-white:     #0F0E0C;
+
+  --color-success: #16A34A;
+  --color-warning: #D97706;
+  --color-danger:  #DC2626;
+  --color-info:    #2563EB;
+  --color-orange:  #EA6C1A;
+  --color-yellow:  #CA8A04;
+
+  --success-bg:    #DCFCE7;  --success-border: #86EFAC;
+  --warning-bg:    #FEF3C7;  --warning-border: #FCD34D;
+  --danger-bg:     #FEE2E2;  --danger-border:  #FCA5A5;
+  --info-bg:       #DBEAFE;  --info-border:    #93C5FD;
+
+  --info-glow:    rgba(37, 99, 235, 0.18);
+  --success-glow: rgba(22, 163, 74, 0.15);
+  --warning-glow: rgba(217, 119, 6, 0.15);
+  --danger-glow:  rgba(220, 38, 38, 0.15);
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.10);
+  --shadow-lg:  0 12px 40px rgba(0,0,0,0.14);
+  --shadow-pop: 0 8px 28px rgba(0,0,0,0.11);
+  --ring-focus: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--color-info);
+
+  --chart-stroke: #1A1916;
+  --chart-fill-0: rgba(0,0,0,0.06);
+  --chart-fill-100: rgba(0,0,0,0);
+  --chart-axis: #A8A49C;
+  --chart-grid: #CCCAC5;
+
+  --link-fg: #1C1A17;
+}
+
+/* ---- Semantic type classes ---- */
+.ds-display {
+  font-family: var(--font-mono);
+  font-size: var(--fs-display);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  color: var(--text-white);
+  font-variant-numeric: tabular-nums;
+}
+.ds-kpi {
+  font-family: var(--font-mono);
+  font-size: var(--fs-kpi);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  color: var(--text-white);
+  font-variant-numeric: tabular-nums;
+}
+.ds-h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-tight);
+  color: var(--text-primary);
+}
+.ds-h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-tight);
+  color: var(--text-primary);
+}
+.ds-h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+}
+.ds-body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-base);
+  color: var(--text-primary);
+}
+.ds-sm {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-base);
+  color: var(--text-secondary);
+}
+.ds-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+}
+.ds-eyebrow {
+  font-family: var(--font-display);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.ds-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
