@@ -6,6 +6,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -20,7 +21,15 @@ public class KpiResource {
     KpisClient kpisClient;
 
     @GET
-    public Response listar() {
-        return kpisClient.listarKpis();
+    public Response obtener(
+            @QueryParam("sucursalId") Long sucursalId,
+            @QueryParam("periodo") String periodo) {
+        return kpisClient.obtenerKpis(sucursalId, periodo);
+    }
+
+    @GET
+    @Path("/comparativo")
+    public Response comparativo(@QueryParam("periodo") String periodo) {
+        return kpisClient.obtenerComparativo(periodo);
     }
 }
