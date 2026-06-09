@@ -38,6 +38,21 @@ services:
     networks:
       - gf-network
 
+  bff:
+    container_name: gf-bff
+    build:
+      context: ./bff
+      dockerfile: src/main/docker/Dockerfile
+    environment:
+      MS_DATOS_URL: http://ms-datos:8080
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+    depends_on:
+      - ms-datos
+    networks:
+      - gf-network
+
 volumes:
   pgdata:
 
