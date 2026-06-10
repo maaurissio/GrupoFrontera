@@ -1,122 +1,91 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useRef } from 'react';
+import { Login, ExportModal } from './components/Login';
+import { Sidebar } from './components/Sidebar';
+import { Topbar } from './components/Topbar';
+import { PageHead, Button } from './components/Primitives';
+import { DashboardView } from './views/DashboardView';
+import { ReportesView } from './views/ReportesView';
+import { InventoryView } from './views/InventoryView';
+import { UsersView } from './views/UsersView';
+import { BranchesView } from './views/BranchesView';
+import { ReportesGuardadosView } from './views/ReportesGuardadosView';
+import { ConfiguracionView } from './views/ConfiguracionView';
+import type { ViewId } from './data';
 
-function App() {
-  const [count, setCount] = useState(0)
+const TITLES: Record<ViewId, string> = {
+  dashboard:         'Resumen',
+  reportes:          'Reportes',
+  inventario:        'Inventario',
+  usuarios:          'Usuarios',
+  sucursales:        'Sucursales',
+  reportesGuardados: 'Reportes guardados',
+  configuracion:     'Configuración',
+};
+
+const SUBTITLES: Record<ViewId, string> = {
+  dashboard:         'Estado operacional en tiempo real · Grupo Cordillera',
+  reportes:          'KPIs por sucursal y período · exportables',
+  inventario:        'Stock por producto y alertas de quiebre',
+  usuarios:          'Roles, sucursales y estado de cuentas',
+  sucursales:        'Red de sucursales · ubicación y cobertura',
+  reportesGuardados: 'Historial, favoritos y reportes programados',
+  configuracion:     'Preferencias del sistema y tu cuenta',
+};
+
+function AppShell() {
+  const [view, setView] = useState<ViewId>('dashboard');
+  const [exporting, setExporting] = useState(false);
+  const scrollRef = useRef<HTMLElement>(null);
+
+  const navigate = (v: ViewId) => {
+    setView(v);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
+
+  const renderView = () => {
+    switch (view) {
+      case 'dashboard':         return <DashboardView onNavigate={navigate} />;
+      case 'reportes':          return <ReportesView />;
+      case 'inventario':        return <InventoryView />;
+      case 'usuarios':          return <UsersView />;
+      case 'sucursales':        return <BranchesView />;
+      case 'reportesGuardados': return <ReportesGuardadosView />;
+      case 'configuracion':     return <ConfiguracionView />;
+      default:                  return <DashboardView onNavigate={navigate} />;
+    }
+  };
+
+  const headerActions = () => {
+    if (view === 'usuarios') return null;
+    if (view === 'sucursales') return <Button variant="secondary" icon="map">Ver todas en el mapa</Button>;
+    if (view === 'reportes') return null;
+    return (
+      <>
+        <Button variant="secondary" icon="filter">Filtros</Button>
+        <Button variant="primary" icon="download" onClick={() => setExporting(true)}>Exportar</Button>
+      </>
+    );
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <Sidebar active={view} onNavigate={navigate} onLogout={() => window.location.reload()} />
+      <main ref={scrollRef} className="ds-scroll" style={{ flex: 1, overflowY: 'auto', height: '100%', position: 'relative' }}>
+        <Topbar title={TITLES[view]} alerts={7} onExport={() => setExporting(true)} />
+        <div style={{ padding: '28px 28px 48px' }}>
+          <PageHead title={TITLES[view]} subtitle={SUBTITLES[view]}>
+            {headerActions()}
+          </PageHead>
+          {renderView()}
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      </main>
+      {exporting && <ExportModal onClose={() => setExporting(false)} />}
+    </div>
+  );
 }
 
-export default App
+export default function App() {
+  const [authed, setAuthed] = useState(false);
+  if (!authed) return <Login onLogin={() => setAuthed(true)} />;
+  return <AppShell />;
+}

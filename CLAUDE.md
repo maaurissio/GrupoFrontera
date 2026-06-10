@@ -18,7 +18,7 @@ Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`,
 | `ms-kpis`     | KPI computation              | Scaffold                                                |
 | `ms-reportes` | Reporting                    | Scaffold                                                |
 | `bff`         | Backend-for-frontend         | Empty                                                   |
-| `front`       | Frontend                     | Empty                                                   |
+| `front`       | Frontend React + Vite + TS   | **UI completa implementada** — Cordillera Design System, 7 vistas, datos mock, esperando BFF |
 
 Java package convention: `com.grupofrontera.ms<name>` (e.g. `com.grupofrontera.msusers`). `groupId` is `com.grupofrontera`. Note: `ms-users/contexto_ms_users.md` documents the original design but is **stale on two points** — the real package is `com.grupofrontera.*` (not `cl.duoc.cordillera`) and the Quarkus platform version in `pom.xml` is `3.36.0` (not 3.34.5). Trust the code/POM over that doc.
 
@@ -124,3 +124,89 @@ POST /auth/register     → ms-auth:8081   → body: { usuarioId, email, passwor
 POST /auth/login        → ms-auth:8081   → returns { accessToken, refreshToken }
 POST /auth/validate     → ms-auth:8081   → header: Authorization: Bearer <token>
 ```
+
+## front — Frontend
+
+**Stack**: React 19 + Vite + TypeScript. Ubicado en `front/`.
+
+**Dev server**: `npm run dev` desde `front/` → `http://localhost:5173`
+
+**Decisión de arquitectura**: El frontend consumirá datos a través del **BFF** (aún no implementado). Actualmente opera con datos mock en `src/data.ts`. No conectar el front directamente a los microservicios — toda la comunicación debe pasar por el BFF cuando esté disponible.
+
+**CORS**: Habilitado en ms-users y ms-auth para `http://localhost:5173` (ver `application.properties` de cada servicio).
+
+### Comandos
+
+```shell
+cd front
+npm install       # instalar dependencias
+npm run dev       # dev server → http://localhost:5173
+npm run build     # build de producción → dist/
+```
+
+### Estructura de `front/src/`
+
+```
+src/
+  main.tsx                    # entry point — monta PrefsProvider + App
+  App.tsx                     # shell: auth state, routing por vista
+  index.css                   # importa tokens.css + kit.css + maplibre-gl.css
+  data.ts                     # datos mock alineados a CA-* (reemplazar con calls al BFF)
+  styles/
+    tokens.css                # variables CSS del design system (colores, tipografía, spacing)
+    kit.css                   # estilos de componentes (botones, badges, tabla, inputs, cards)
+  context/
+    PrefsContext.tsx           # tema claro/oscuro + densidad, persiste en localStorage
+  components/
+    Icon.tsx                  # wrapper de lucide-react con lookup por nombre kebab-case
+    Primitives.tsx            # Badge, Delta, Button, Avatar, ColorAvatar, Switch, KpiCard, PageHead, Panel, ModalOverlay
+    Sidebar.tsx               # sidebar fijo 240px con nav + footer de usuario
+    Topbar.tsx                # barra superior sticky con búsqueda, alertas, exportar
+    Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover)
+    Login.tsx                 # pantalla de login + ExportModal
+  views/
+    DashboardView.tsx         # CA-DASH-01..04: KPIs, chart, module cards, ventas recientes
+    ReportesView.tsx          # CA-REP-01..03: filtros, KPIs, chart, tabla comparativo
+    InventoryView.tsx         # CA-INV-01..03: tabla SKU, filtros, modal editar stock, panel alertas
+    UsersView.tsx             # CA-USERS-01..04: tabla usuarios, modales crear/confirmar/detalle
+    BranchesView.tsx          # lista sucursales + mapa MapLibre dark + modal CRUD
+    ReportesGuardadosView.tsx # historial, favoritos, reportes programados
+    ConfiguracionView.tsx     # tabs: Perfil, Notificaciones, Interfaz, Sucursales, Integraciones, Auditoría, Seguridad
+public/
+  fonts/                      # Geist, Geist Mono, Inter (TTF, full weight range)
+  assets/
+    logo-cordillera.svg       # lockup horizontal
+    logo-mark.svg             # ícono solo (usado como favicon)
+```
+
+### Dependencias relevantes
+
+| Paquete | Uso |
+|---|---|
+| `lucide-react` | Íconos (stroke 1.75, lookup dinámico por nombre kebab-case) |
+| `maplibre-gl` | Mapa dark en BranchesView con tiles CartoCDN |
+| `react-router-dom` | Instalado, no usado aún (routing por estado interno en App.tsx) |
+
+### Design system
+
+Basado en el **Cordillera Design System** (`design-handoff/cordillera-design-system/`):
+- Paleta dark: `#0F0F0F` base → `#1A1A1A` sidebar → `#1E1E1E` cards → `#252525` hover
+- Fuentes: **Geist** (títulos) · **Inter** (cuerpo) · **Geist Mono** (números, KPIs, monospace)
+- Tema claro disponible vía `[data-theme="light"]` — se cambia desde Configuración → Interfaz
+- Densidad de datos: compact / normal / wide — se cambia desde Configuración → Interfaz
+
+### Conectar al BFF (pendiente)
+
+Cuando el BFF esté implementado:
+1. Reemplazar `src/data.ts` con un cliente HTTP (fetch/axios) apuntando al BFF
+2. Conectar login en `App.tsx` a `POST /auth/login` via BFF
+3. Guardar el JWT y enviarlo en headers de cada request
+4. Las vistas no necesitan cambios — solo cambia la fuente de datos
+
+### URLs de los servicios (desarrollo)
+
+| Variable          | Valor                    |
+|-------------------|--------------------------|
+| ms-auth base URL  | `http://localhost:8081`  |
+| ms-users base URL | `http://localhost:8082`  |
+| front dev server  | `http://localhost:5173`  |
