@@ -35,7 +35,7 @@ function ScheduleReportModal({ onClose }: { onClose: () => void }) {
             <label className="field-label">Sucursal</label>
             <select className="input select" value={suc} onChange={e => setSuc(e.target.value)} style={{ height: 34 }}>
               <option value="all">Todas</option>
-              {DATA.branches.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+              {DATA.branchNames.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div className="field">

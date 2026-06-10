@@ -1,5 +1,6 @@
 import { Icon } from './Icon';
 import { DATA } from '../data';
+import { useAuth } from '../context/AuthContext';
 import type { ViewId } from '../data';
 
 interface SidebarProps {
@@ -9,6 +10,11 @@ interface SidebarProps {
 }
 
 export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
+  const { usuario } = useAuth();
+  const displayName = usuario ? `${usuario.nombre} ${usuario.apellido}`.trim() : '—';
+  const rol = (usuario?.roles ?? [])[0] ?? '';
+  const initials = usuario ? ((usuario.nombre[0] ?? '') + (usuario.apellido[0] ?? '')).toUpperCase() : '—';
+
   return (
     <aside style={{
       width: 240, flex: 'none', background: 'var(--bg-surface-1)',
@@ -77,11 +83,11 @@ export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
       <div style={{ borderTop: '1px solid var(--bg-border)', padding: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px' }}>
           <span className="avatar" style={{ background: 'var(--bg-surface-3)', borderColor: 'var(--bg-border-strong)', color: 'var(--text-secondary)' }}>
-            {DATA.user.initials}
+            {initials}
           </span>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{DATA.user.name}</div>
-            <div className="ds-label" style={{ fontSize: 11 }}>{DATA.user.role}</div>
+            <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+            <div className="ds-label" style={{ fontSize: 11 }}>{rol}</div>
           </div>
           <button
             onClick={onLogout}

@@ -1,13 +1,4 @@
 export const DATA = {
-  user: { name: "Camila Rojas", role: "Gerente General", roleCode: "GERENTE", initials: "CR" },
-
-  kpis: [
-    { id: "ventas",    label: "Ventas del mes",     value: "$4.280.000", icon: "dollar-sign",    accent: "info",    delta: "+12,4%", dir: "up"   as const, sub: "vs mes anterior", desc: "Monto total facturado en el mes en curso." },
-    { id: "tx",        label: "Transacciones",      value: "1.842",      icon: "shopping-cart",  accent: "neutral", delta: "+6,1%",  dir: "up"   as const, sub: "vs mes anterior", desc: "Cantidad de ventas registradas en el período." },
-    { id: "minimo",    label: "Bajo mínimo",        value: "7",          icon: "alert-triangle", accent: "warning", badge: { text: "Requiere atención", kind: "warning" as const }, desc: "SKU con stock por debajo del mínimo configurado." },
-    { id: "servicios", label: "Servicios activos",  value: "7/8",        icon: "activity",       accent: "warning", badge: { text: "Degradado", kind: "warning" as const }, desc: "Microservicios operativos de la plataforma." },
-  ],
-
   chart: {
     months: ["Ene", "Feb", "Mar", "Abr", "May", "Jun"],
     ventas: [38.2, 41.0, 39.6, 46.4, 43.1, 50.8],
@@ -34,15 +25,6 @@ export const DATA = {
     { id: "usuarios",   title: "Gestión de usuarios",  desc: "Roles y asignaciones",          icon: "users",       route: "usuarios",   status: "OPERATIVO", kind: "success" as const },
   ],
 
-  branches: [
-    { name: "Santiago Centro", city: "Santiago",    address: "Av. Libertador B. O'Higgins 1234", manager: "Diego Fuentes",  lat: -33.4489, lng: -70.6693, opened: "2018", sales: "$1.284.500", tx: 612,  ticket: "$20.988", meta: 112, delta: "+12,4%", dir: "up"   as const, stock: "OK",         stockKind: "ok"   as const, service: "Operativo", serviceKind: "success"  as const },
-    { name: "Providencia",     city: "Santiago",    address: "Av. Providencia 2145",             manager: "—",              lat: -33.4255, lng: -70.6110, opened: "2020", sales: "$968.300",   tx: 471,  ticket: "$20.558", meta: 96,  delta: "+5,7%",  dir: "up"   as const, stock: "OK",         stockKind: "ok"   as const, service: "Operativo", serviceKind: "success"  as const },
-    { name: "Valparaíso",      city: "Valparaíso",  address: "Av. Pedro Montt 1890",             manager: "—",              lat: -33.0458, lng: -71.6197, opened: "2019", sales: "$847.200",   tx: 388,  ticket: "$21.835", meta: 84,  delta: "+3,1%",  dir: "up"   as const, stock: "3 bajo mín.", stockKind: "warn" as const, service: "Degradado", serviceKind: "warning"  as const },
-    { name: "Viña del Mar",    city: "Valparaíso",  address: "Av. San Martín 540",               manager: "—",              lat: -33.0245, lng: -71.5518, opened: "2021", sales: "$623.940",   tx: 301,  ticket: "$20.729", meta: 73,  delta: "+0,9%",  dir: "up"   as const, stock: "OK",         stockKind: "ok"   as const, service: "Operativo", serviceKind: "success"  as const },
-    { name: "Concepción",      city: "Concepción",  address: "Barros Arana 765",                 manager: "Matías Herrera", lat: -36.8201, lng: -73.0444, opened: "2017", sales: "$1.092.860", tx: 524,  ticket: "$20.856", meta: 64,  delta: "−5,8%",  dir: "down" as const, stock: "Crítico",    stockKind: "crit" as const, service: "Caído",     serviceKind: "danger"   as const },
-    { name: "Talcahuano",      city: "Concepción",  address: "Av. Colón 3120",                   manager: "—",              lat: -36.7249, lng: -73.1168, opened: "2022", sales: "$418.700",   tx: 208,  ticket: "$20.130", meta: 71,  delta: "−1,2%",  dir: "down" as const, stock: "OK",         stockKind: "ok"   as const, service: "Operativo", serviceKind: "success"  as const },
-  ],
-
   inventario: [
     { sku: "TEC-4471", name: "Smart TV 55\" UHD",           cat: "Tecnología", branch: "Concepción",      pres: 1,  online: 1,  min: 8,  kind: "crit" as const },
     { sku: "HOG-2204", name: "Lavadora Carga Frontal 9kg",  cat: "Hogar",      branch: "Concepción",      pres: 0,  online: 1,  min: 5,  kind: "crit" as const },
@@ -52,15 +34,6 @@ export const DATA = {
     { sku: "TEC-5567", name: "Audífonos In-Ear BT",         cat: "Tecnología", branch: "Santiago Centro", pres: 28, online: 14, min: 20, kind: "ok"   as const },
     { sku: "HOG-8890", name: "Set Sartenes Antiadherente",  cat: "Hogar",      branch: "Providencia",     pres: 40, online: 24, min: 25, kind: "ok"   as const },
     { sku: "HOG-3315", name: "Aspiradora Ciclónica 2.0",    cat: "Hogar",      branch: "Santiago Centro", pres: 18, online: 9,  min: 12, kind: "ok"   as const },
-  ],
-
-  usuarios: [
-    { rut: "15.482.991-2", name: "Camila Rojas",   email: "c.rojas@cordillera.cl",   roles: ["GERENTE", "ADMIN"],      branches: ["Todas"],                                    estado: "ACTIVO"    as const, initials: "CR" },
-    { rut: "12.903.557-K", name: "Diego Fuentes",  email: "d.fuentes@cordillera.cl", roles: ["JEFE_SUCURSAL"],         branches: ["Santiago Centro"],                          estado: "ACTIVO"    as const, initials: "DF" },
-    { rut: "17.220.104-5", name: "Valentina Soto", email: "v.soto@cordillera.cl",    roles: ["ANALISTA"],             branches: ["Valparaíso", "Viña del Mar"],                estado: "ACTIVO"    as const, initials: "VS" },
-    { rut: "16.554.870-9", name: "Matías Herrera", email: "m.herrera@cordillera.cl", roles: ["JEFE_SUCURSAL"],         branches: ["Concepción", "Talcahuano"],                  estado: "ACTIVO"    as const, initials: "MH" },
-    { rut: "19.882.013-1", name: "Antonia Vega",   email: "a.vega@cordillera.cl",    roles: ["ANALISTA", "SOPORTE"],  branches: ["Santiago Centro", "Providencia", "Valparaíso"], estado: "INACTIVO"  as const, initials: "AV" },
-    { rut: "20.114.776-3", name: "Pedro Núñez",    email: "p.nunez@cordillera.cl",   roles: ["VENDEDOR"],             branches: ["Talcahuano"],                               estado: "BLOQUEADO" as const, initials: "PN" },
   ],
 
   roleMeta: {
@@ -79,6 +52,11 @@ export const DATA = {
   } as Record<string, { kind: string }>,
 
   categorias: ["Tecnología", "Hogar"],
+
+  branchNames: [
+    "Santiago Centro", "Providencia", "Valparaíso",
+    "Viña del Mar", "Concepción", "Talcahuano",
+  ],
 
   reportesGuardados: [
     { id: "RPT-001", nombre: "Resumen mensual — Grupo",          periodo: "Mayo 2026",      sucursal: "Todas",                formato: "PDF",   fecha: "01 jun 2026, 08:00", estado: "Generado"   as const, fav: true,  programado: true,  frecuencia: "Mensual" },
@@ -113,12 +91,13 @@ export const DATA = {
   ],
 
   nav: [
-    { id: "dashboard",  label: "Resumen",    icon: "layout-dashboard" },
-    { id: "reportes",   label: "Reportes",   icon: "bar-chart-3" },
-    { id: "inventario", label: "Inventario", icon: "package",          badge: 7 },
-    { id: "usuarios",   label: "Usuarios",   icon: "users" },
-    { id: "sucursales", label: "Sucursales", icon: "map-pin" },
+    { id: "dashboard",  label: "Resumen",           icon: "layout-dashboard" },
+    { id: "reportes",   label: "Reportes",           icon: "bar-chart-3" },
+    { id: "datos",      label: "Datos",              icon: "database",          badge: 0 },
+    { id: "inventario", label: "Inventario",         icon: "package",           badge: 7 },
+    { id: "usuarios",   label: "Usuarios",           icon: "users" },
+    { id: "sucursales", label: "Sucursales",         icon: "map-pin" },
   ],
 };
 
-export type ViewId = "dashboard" | "reportes" | "inventario" | "usuarios" | "sucursales" | "reportesGuardados" | "configuracion";
+export type ViewId = "dashboard" | "reportes" | "inventario" | "usuarios" | "sucursales" | "reportesGuardados" | "configuracion" | "datos";

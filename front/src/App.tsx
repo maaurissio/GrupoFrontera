@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login, ExportModal } from './components/Login';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
@@ -10,6 +11,7 @@ import { UsersView } from './views/UsersView';
 import { BranchesView } from './views/BranchesView';
 import { ReportesGuardadosView } from './views/ReportesGuardadosView';
 import { ConfiguracionView } from './views/ConfiguracionView';
+import { DatosView } from './views/DatosView';
 import type { ViewId } from './data';
 
 const TITLES: Record<ViewId, string> = {
@@ -20,6 +22,7 @@ const TITLES: Record<ViewId, string> = {
   sucursales:        'Sucursales',
   reportesGuardados: 'Reportes guardados',
   configuracion:     'Configuración',
+  datos:             'Datos consolidados',
 };
 
 const SUBTITLES: Record<ViewId, string> = {
@@ -30,9 +33,11 @@ const SUBTITLES: Record<ViewId, string> = {
   sucursales:        'Red de sucursales · ubicación y cobertura',
   reportesGuardados: 'Historial, favoritos y reportes programados',
   configuracion:     'Preferencias del sistema y tu cuenta',
+  datos:             'Ingesta, validación y trazabilidad de datos',
 };
 
 function AppShell() {
+  const { logout } = useAuth();
   const [view, setView] = useState<ViewId>('dashboard');
   const [exporting, setExporting] = useState(false);
   const scrollRef = useRef<HTMLElement>(null);
@@ -51,6 +56,7 @@ function AppShell() {
       case 'sucursales':        return <BranchesView />;
       case 'reportesGuardados': return <ReportesGuardadosView />;
       case 'configuracion':     return <ConfiguracionView />;
+      case 'datos':             return <DatosView />;
       default:                  return <DashboardView onNavigate={navigate} />;
     }
   };
@@ -59,6 +65,7 @@ function AppShell() {
     if (view === 'usuarios') return null;
     if (view === 'sucursales') return <Button variant="secondary" icon="map">Ver todas en el mapa</Button>;
     if (view === 'reportes') return null;
+    if (view === 'datos') return null;
     return (
       <>
         <Button variant="secondary" icon="filter">Filtros</Button>
@@ -69,7 +76,7 @@ function AppShell() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar active={view} onNavigate={navigate} onLogout={() => window.location.reload()} />
+      <Sidebar active={view} onNavigate={navigate} onLogout={logout} />
       <main ref={scrollRef} className="ds-scroll" style={{ flex: 1, overflowY: 'auto', height: '100%', position: 'relative' }}>
         <Topbar title={TITLES[view]} alerts={7} onExport={() => setExporting(true)} />
         <div style={{ padding: '28px 28px 48px' }}>
@@ -84,8 +91,23 @@ function AppShell() {
   );
 }
 
-export default function App() {
-  const [authed, setAuthed] = useState(false);
-  if (!authed) return <Login onLogin={() => setAuthed(true)} />;
+function AuthGate() {
+  const { usuario, loading } = useAuth();
+  if (loading) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span className="ds-sm" style={{ color: 'var(--text-secondary)' }}>Cargando…</span>
+      </div>
+    );
+  }
+  if (!usuario) return <Login />;
   return <AppShell />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
 }

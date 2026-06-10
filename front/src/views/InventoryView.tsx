@@ -56,7 +56,7 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [cat, setCat] = useState('Tecnología');
-  const [branch, setBranch] = useState(DATA.branches[0].name);
+  const [branch, setBranch] = useState(DATA.branchNames[0]);
   const [pres, setPres] = useState('');
   const [online, setOnline] = useState('');
   const [min, setMin] = useState('');
@@ -84,7 +84,7 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
           <div className="field">
             <label className="field-label">Sucursal</label>
             <select className="input select" value={branch} onChange={e => setBranch(e.target.value)} style={{ height: 34 }}>
-              {DATA.branches.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+              {DATA.branchNames.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
         </div>
@@ -129,7 +129,7 @@ export function InventoryView() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select className="input select" value={sucursal} onChange={e => setSucursal(e.target.value)} style={{ height: 32, width: 'auto', paddingRight: 28 }}>
               <option value="all">Todas las sucursales</option>
-              {DATA.branches.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+              {DATA.branchNames.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
             <select className="input select" value={cat} onChange={e => setCat(e.target.value)} style={{ height: 32, width: 'auto', paddingRight: 28 }}>
               <option value="all">Toda categoría</option>

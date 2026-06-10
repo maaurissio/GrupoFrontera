@@ -8,19 +8,43 @@ Management-monitoring platform for a multi-branch retail company (Grupo Cordille
 
 ### Monorepo layout
 
-Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`, `Dockerfile`, `docker-compose.yml`). There is **no root aggregator POM** — build and run each service from its own directory.
+Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`, `Dockerfile`). There is **no root aggregator POM** — build and run each service from its own directory. Only ms-auth and ms-users have `docker-compose.yml`; ms-datos and ms-kpis use standalone Docker containers (see port table below).
 
 | Directory     | Role                         | Status                                                  |
 |---------------|------------------------------|---------------------------------------------------------|
 | `ms-users`    | User/role/branch domain      | **Fully implemented** — the reference for all patterns  |
 | `ms-auth`     | Authentication & JWT         | **Fully implemented** — JWT HS384, BCrypt, refresh tokens |
-| `ms-datos`    | Data ingestion               | Scaffold                                                |
-| `ms-kpis`     | KPI computation              | Scaffold                                                |
+| `ms-datos`    | Data ingestion               | Scaffold — implemented, requires manual DB container    |
+| `ms-kpis`     | KPI computation              | Scaffold — implemented, requires RabbitMQ + seed data   |
 | `ms-reportes` | Reporting                    | Scaffold                                                |
-| `bff`         | Backend-for-frontend         | Empty                                                   |
-| `front`       | Frontend React + Vite + TS   | **UI completa implementada** — Cordillera Design System, 7 vistas, datos mock, esperando BFF |
+| `bff`         | Backend-for-frontend         | **Fully implemented** — integra todos los microservicios |
+| `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 8 vistas      |
 
 Java package convention: `com.grupofrontera.ms<name>` (e.g. `com.grupofrontera.msusers`). `groupId` is `com.grupofrontera`. Note: `ms-users/contexto_ms_users.md` documents the original design but is **stale on two points** — the real package is `com.grupofrontera.*` (not `cl.duoc.cordillera`) and the Quarkus platform version in `pom.xml` is `3.36.0` (not 3.34.5). Trust the code/POM over that doc.
+
+---
+
+## Puertos — IMPORTANTE: conflictos en esta máquina
+
+Esta máquina tiene servicios Windows que ocupan puertos por defecto. Los puertos fueron reasignados:
+
+| Servicio    | Puerto HTTP | Puerto BD (host) | BD name        |
+|-------------|-------------|------------------|----------------|
+| `ms-auth`   | **8081**    | 5435             | db_auth        |
+| `ms-users`  | **8085** ⚠️ | 5434             | db_users       |
+| `ms-datos`  | **8083** ⚠️ | **5437** ⚠️      | grupofrontera  |
+| `ms-kpis`   | **8086**    | 5438             | kpis_db        |
+| `bff`       | **8090**    | —                | —              |
+| `front`     | **5173**    | —                | —              |
+
+> **¿Por qué los puertos no-estándar?**
+> - Puerto 8080: ocupado por **Jenkins** (`java`, PID fijo)
+> - Puerto 8082: ocupado por **SSRS** (SQL Server Reporting Services, `RSHostingService`, HTTP.sys)
+> - Puerto 5432: conflicto entre **PostgreSQL local** y Docker — pg-datos usa 5437
+
+Los cambios ya están aplicados en los `application.properties` de cada servicio. No revertirlos.
+
+---
 
 ## Commands
 
@@ -35,37 +59,39 @@ Run all commands from within a service directory (e.g. `cd ms-users`). Use the w
 java -jar target/quarkus-app/quarkus-run.jar
 ```
 
-Run a single test class / method:
+**ms-datos requiere flag extra** para evitar conflicto con Jenkins en el puerto de live-reload:
 ```shell
-./mvnw test -Dtest=UsersResourceTest
-./mvnw test -Dtest=UsersResourceTest#methodName
+cd ms-datos
+./mvnw quarkus:dev -Dquarkus.live-reload.port=8193
 ```
 
-Database (per service, e.g. ms-users) — DevServices are **disabled**, so Postgres must be running. See `ms-users/SETUP.md` for full setup guide.
+### Cómo levantar todo el stack (orden correcto)
 
-**Desarrollo (BD en Docker, app en local):**
-```shell
-docker-compose up -d db-users   # Solo la BD — NO usar "up -d" a secas al clonar (falla sin target/)
-./mvnw quarkus:dev
+```powershell
+# 1. Contenedores Docker (si no están corriendo)
+docker start pg-auth pg-users pg-datos pg-kpis rabbitmq
+# Si es primera vez:
+docker run -d --name pg-auth  -e POSTGRES_USER=usuario_cordillera -e POSTGRES_PASSWORD=cordillera_pass -e POSTGRES_DB=db_auth    -p 5435:5432 postgres:16
+docker run -d --name pg-users -e POSTGRES_USER=usuario_cordillera -e POSTGRES_PASSWORD=cordillera_pass -e POSTGRES_DB=db_users   -p 5434:5432 postgres:16
+docker run -d --name pg-datos -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=grupofrontera              -p 5437:5432 postgres:16
+docker run -d --name pg-kpis  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=kpis_db                   -p 5438:5432 postgres:16
+docker run -d --name rabbitmq -e RABBITMQ_DEFAULT_USER=guest -e RABBITMQ_DEFAULT_PASS=guest -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+
+# 2–6. Cada servicio en su propia terminal PowerShell
+cd ms-auth   && .\mvnw.cmd quarkus:dev   # terminal 1
+cd ms-users  && .\mvnw.cmd quarkus:dev   # terminal 2
+cd ms-datos  && .\mvnw.cmd quarkus:dev -Dquarkus.live-reload.port=8193  # terminal 3
+cd ms-kpis   && .\mvnw.cmd quarkus:dev   # terminal 4
+cd bff       && .\mvnw.cmd quarkus:dev   # terminal 5
+cd front     && npm run dev              # terminal 6
+
+# 7. Registrar credenciales en ms-auth (solo si ms-auth se reinició — su import.sql está vacío)
+curl -X POST http://localhost:8081/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"d1111111-1111-1111-1111-111111111111\",\"email\":\"admin@cordillera.cl\",\"password\":\"Admin1234!\"}"
+curl -X POST http://localhost:8081/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"e2222222-2222-2222-2222-222222222222\",\"email\":\"soporte@cordillera.cl\",\"password\":\"Soporte1234!\"}"
+curl -X POST http://localhost:8081/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"f3333333-3333-3333-3333-333333333333\",\"email\":\"gerente@cordillera.cl\",\"password\":\"Gerente1234!\"}"
 ```
 
-**Todo en Docker (BD + app):**
-```shell
-./mvnw package -DskipTests      # Primero compilar el JAR
-docker-compose up -d            # Luego levantar ambos contenedores
-```
-
-**Acceder a la BD directamente:**
-```shell
-docker exec -it pg-users psql -U usuario_cordillera -d db_users
-```
-
-Swagger UI is enabled in every service at `/swagger-ui`.
-
-| Service    | Port | DB port |
-|------------|------|---------|
-| `ms-auth`  | 8081 | 5435    |
-| `ms-users` | 8082 | 5434    |
+---
 
 ## Architecture (ms-users — the template to follow)
 
@@ -87,14 +113,29 @@ Conventions enforced across the codebase (mirror these when adding code):
 - **Soft delete**: `Usuario`/`Rol`/`Sucursal` use `estado`/`activo` flags rather than physical deletes; default list endpoints return only active records.
 - **Bootstrap**: `CatalogoGeograficoBootstrap` seeds geographic catalog data idempotently via `@Observes StartupEvent`.
 
+---
+
 ## Database notes
 
-- `application.properties` currently uses `quarkus.hibernate-orm.schema-management.strategy=drop-and-create` with `sql-load-script=import.sql` — the schema is **dropped and reseeded on every startup**. This is dev-only; switch to `update` (or a `%prod` profile) before any production use.
+- ms-auth y ms-users usan `drop-and-create` + `import.sql` — el esquema **se destruye y recrea en cada arranque**. Solo para dev; cambiar a `update` antes de producción.
+- ms-datos usa Flyway (`migrate-at-start=true`). ms-kpis también usa Flyway.
 - Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Tests use `quarkus-junit5` + `rest-assured`.
+
+### Credenciales semilla (ms-users import.sql)
+
+ms-users siembra 3 usuarios. ms-auth tiene el import.sql **vacío** — las credenciales se registran via `POST /auth/register` tras cada restart:
+
+| usuarioId (UUID prefix)    | Email                   | Password       | Rol     |
+|----------------------------|-------------------------|----------------|---------|
+| `d1111111-…`               | admin@cordillera.cl     | Admin1234!     | ADMIN   |
+| `e2222222-…`               | soporte@cordillera.cl   | Soporte1234!   | SOPORTE |
+| `f3333333-…`               | gerente@cordillera.cl   | Gerente1234!   | GERENTE |
+
+---
 
 ## ms-auth — Authentication microservice
 
-**Fully implemented.** Port 8081, DB db_auth (port 5435). See `ms-auth/SETUP.md`.
+**Fully implemented.** Port **8081**, DB db_auth (port 5435). See `ms-auth/SETUP.md`.
 
 ### Endpoints
 
@@ -116,14 +157,67 @@ Conventions enforced across the codebase (mirror these when adding code):
 - **Password architecture**: passwords live **exclusively in ms-auth**. ms-users has no password field. The BFF orchestrates user creation: `POST /usuarios` (ms-users) → take returned `id` → `POST /auth/register` (ms-auth).
 - **Config properties**: `auth.jwt.secret`, `auth.jwt.expiration-hours=1`, `auth.jwt.refresh-expiration-days=7`.
 
-### Integration flow (without BFF)
+### Integration flow (via BFF)
 
 ```
-POST /usuarios          → ms-users:8082  → returns { id: UUID, ... }
-POST /auth/register     → ms-auth:8081   → body: { usuarioId, email, password }
-POST /auth/login        → ms-auth:8081   → returns { accessToken, refreshToken }
-POST /auth/validate     → ms-auth:8081   → header: Authorization: Bearer <token>
+POST /api/bff/auth/login    → bff:8090 → ms-auth:8081  → returns { usuarioId, email, accessToken, refreshToken }
+POST /api/bff/auth/refresh  → bff:8090 → ms-auth:8081
+POST /api/bff/auth/logout   → bff:8090 → ms-auth:8081
 ```
+
+---
+
+## bff — Backend for Frontend
+
+**Fully implemented.** Puerto **8090**. Agrega todos los microservicios con una sola API para el frontend.
+
+### Endpoints BFF
+
+| Method | Path                               | Upstream         |
+|--------|------------------------------------|------------------|
+| POST   | /api/bff/auth/login                | ms-auth          |
+| POST   | /api/bff/auth/refresh              | ms-auth          |
+| POST   | /api/bff/auth/logout               | ms-auth          |
+| GET    | /api/bff/usuarios                  | ms-users         |
+| GET    | /api/bff/usuarios/{id}             | ms-users         |
+| POST   | /api/bff/usuarios                  | ms-users + ms-auth |
+| PUT    | /api/bff/usuarios/{id}/activar     | ms-users         |
+| PUT    | /api/bff/usuarios/{id}/desactivar  | ms-users         |
+| GET    | /api/bff/sucursales                | ms-datos         |
+| POST   | /api/bff/sucursales                | ms-datos         |
+| PUT    | /api/bff/sucursales/{id}           | ms-datos         |
+| PUT    | /api/bff/sucursales/{id}/estado    | ms-datos         |
+| GET    | /api/bff/kpis                      | ms-kpis          |
+| GET    | /api/bff/kpis/comparativo          | ms-kpis          |
+| GET    | /api/bff/datos                     | ms-datos         |
+| POST   | /api/bff/datos/{id}/reprocesar     | ms-datos         |
+| GET    | /api/bff/reportes/exportar         | ms-reportes      |
+
+### Detalles de implementación BFF
+
+- **CORS**: habilitado para `http://localhost:5173`
+- **Error propagation**: `ClientExceptionMapper` (`bff/src/main/java/com/grupofrontera/bff/exception/`) propaga códigos 4xx de los microservicios correctamente. `quarkus.rest-client.disable-default-mapper=true` en `application.properties`.
+- **Sin seguridad interna**: el BFF no valida JWT — confía en que ms-auth valida. ms-users no tiene extensiones de seguridad.
+- **Dos modelos de sucursal**: `/api/bff/sucursales` apunta a ms-datos (id: `Long`). ms-users tiene sus propias sucursales (id: `UUID`) — no expuestas en BFF.
+
+---
+
+## ms-kpis — KPI microservice
+
+Puerto **8086**, BD kpis_db (puerto 5438). Requiere **RabbitMQ** corriendo en localhost:5672.
+
+- Los KPIs se calculan a partir de eventos recibidos via RabbitMQ (`venta.realizada`, `actualizacion.stock`).
+- En dev, el servicio arranca sin datos. Para tener datos de prueba insertar directamente:
+
+```sql
+-- docker exec -it pg-kpis psql -U postgres -d kpis_db
+INSERT INTO kpis (sucursal_id, periodo, total_ventas, cantidad_transacciones,
+  ticket_promedio, meta_mensual, porcentaje_cumplimiento,
+  productos_bajo_minimo, rotacion_promedio, dias_sin_reposicion)
+VALUES (1, '2026-06', 15000000, 320, 46875, 18000000, 83.3, 7, 4.2, 3);
+```
+
+---
 
 ## front — Frontend
 
@@ -131,9 +225,7 @@ POST /auth/validate     → ms-auth:8081   → header: Authorization: Bearer <to
 
 **Dev server**: `npm run dev` desde `front/` → `http://localhost:5173`
 
-**Decisión de arquitectura**: El frontend consumirá datos a través del **BFF** (aún no implementado). Actualmente opera con datos mock en `src/data.ts`. No conectar el front directamente a los microservicios — toda la comunicación debe pasar por el BFF cuando esté disponible.
-
-**CORS**: Habilitado en ms-users y ms-auth para `http://localhost:5173` (ver `application.properties` de cada servicio).
+**Estado**: conectado al BFF. Ya no usa datos mock para auth, usuarios, sucursales, KPIs, datos consolidados ni reportes. Los datos mock restantes en `src/data.ts` corresponden a secciones sin endpoint BFF aún (inventario, reportes guardados, log de auditoría, sesiones, integraciones).
 
 ### Comandos
 
@@ -148,36 +240,56 @@ npm run build     # build de producción → dist/
 
 ```
 src/
-  main.tsx                    # entry point — monta PrefsProvider + App
-  App.tsx                     # shell: auth state, routing por vista
+  main.tsx                    # entry point — monta AuthProvider + PrefsProvider + App
+  App.tsx                     # shell: AuthGate (loading → Login → AppShell), routing por vista
   index.css                   # importa tokens.css + kit.css + maplibre-gl.css
-  data.ts                     # datos mock alineados a CA-* (reemplazar con calls al BFF)
-  styles/
-    tokens.css                # variables CSS del design system (colores, tipografía, spacing)
-    kit.css                   # estilos de componentes (botones, badges, tabla, inputs, cards)
+  data.ts                     # mocks residuales: inventario, reportesGuardados, auditLog, etc.
+  api/
+    types.ts                  # interfaces TS: UsuarioDTO, SucursalDTO, RespuestaKpis, DatoConsolidadoDTO, etc.
+    client.ts                 # fetch wrapper: Authorization header, auto-refresh en 401, AbortSignal
+    auth.ts                   # loginApi, logoutApi, refreshApi
+    usuarios.ts               # listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario
+    sucursales.ts             # listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal
+    kpis.ts                   # obtenerKpis, obtenerComparativo
+    reportes.ts               # exportarReporte → blob download
+    datos.ts                  # listarDatos, reprocesarDato, logDato
   context/
+    AuthContext.tsx            # JWT en memoria, refreshToken en localStorage 'cord_rt', auto-restore al montar
     PrefsContext.tsx           # tema claro/oscuro + densidad, persiste en localStorage
+  hooks/
+    useDebounce.ts            # debounce 350ms
+  utils/
+    rut.ts                    # validarRut (módulo 11), formatearRut
   components/
     Icon.tsx                  # wrapper de lucide-react con lookup por nombre kebab-case
     Primitives.tsx            # Badge, Delta, Button, Avatar, ColorAvatar, Switch, KpiCard, PageHead, Panel, ModalOverlay
-    Sidebar.tsx               # sidebar fijo 240px con nav + footer de usuario
+    Sidebar.tsx               # sidebar fijo 240px — usa AuthContext para nombre/rol/iniciales
     Topbar.tsx                # barra superior sticky con búsqueda, alertas, exportar
     Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover)
-    Login.tsx                 # pantalla de login + ExportModal
+    Login.tsx                 # login real via AuthContext, validación, manejo de errores
   views/
-    DashboardView.tsx         # CA-DASH-01..04: KPIs, chart, module cards, ventas recientes
-    ReportesView.tsx          # CA-REP-01..03: filtros, KPIs, chart, tabla comparativo
-    InventoryView.tsx         # CA-INV-01..03: tabla SKU, filtros, modal editar stock, panel alertas
-    UsersView.tsx             # CA-USERS-01..04: tabla usuarios, modales crear/confirmar/detalle
-    BranchesView.tsx          # lista sucursales + mapa MapLibre dark + modal CRUD
-    ReportesGuardadosView.tsx # historial, favoritos, reportes programados
-    ConfiguracionView.tsx     # tabs: Perfil, Notificaciones, Interfaz, Sucursales, Integraciones, Auditoría, Seguridad
+    DashboardView.tsx         # KPIs reales con selector sucursal+período (obtenerKpis)
+    ReportesView.tsx          # comparativo real + export real (exportarReporte), umbrales >90/60-90/<60
+    InventoryView.tsx         # datos mock — sin endpoint BFF
+    UsersView.tsx             # CRUD real de usuarios, validación RUT, debounced search
+    BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre con coords estáticas
+    DatosView.tsx             # datos consolidados: filtros, reprocesar, log trazabilidad (CA-1.17–1.19)
+    ReportesGuardadosView.tsx # datos mock — sin endpoint BFF
+    ConfiguracionView.tsx     # perfil desde AuthContext; logout en tab Seguridad
 public/
   fonts/                      # Geist, Geist Mono, Inter (TTF, full weight range)
   assets/
     logo-cordillera.svg       # lockup horizontal
     logo-mark.svg             # ícono solo (usado como favicon)
 ```
+
+### Patrones clave del frontend
+
+- **Auth**: `accessToken` en estado React (memoria), `refreshToken` en `localStorage['cord_rt']`. En 401 → `client.ts` llama refresh automáticamente y reintenta.
+- **AbortController**: todos los `useEffect` de fetch crean un `AbortController` y lo cancelan al desmontar.
+- **Debounce**: `useDebounce(value, 350)` en campos de búsqueda.
+- **RUT**: `validarRut(rut, dv)` en `UsersView` antes de submit (módulo 11 chileno).
+- **Coords del mapa**: `BranchesView` tiene una tabla estática `COORDS` por nombre de sucursal — la API no provee lat/lng.
 
 ### Dependencias relevantes
 
@@ -195,18 +307,14 @@ Basado en el **Cordillera Design System** (`design-handoff/cordillera-design-sys
 - Tema claro disponible vía `[data-theme="light"]` — se cambia desde Configuración → Interfaz
 - Densidad de datos: compact / normal / wide — se cambia desde Configuración → Interfaz
 
-### Conectar al BFF (pendiente)
-
-Cuando el BFF esté implementado:
-1. Reemplazar `src/data.ts` con un cliente HTTP (fetch/axios) apuntando al BFF
-2. Conectar login en `App.tsx` a `POST /auth/login` via BFF
-3. Guardar el JWT y enviarlo en headers de cada request
-4. Las vistas no necesitan cambios — solo cambia la fuente de datos
-
 ### URLs de los servicios (desarrollo)
 
-| Variable          | Valor                    |
+| Servicio          | URL                      |
 |-------------------|--------------------------|
-| ms-auth base URL  | `http://localhost:8081`  |
-| ms-users base URL | `http://localhost:8082`  |
+| BFF               | `http://localhost:8090`  |
+| ms-auth           | `http://localhost:8081`  |
+| ms-users          | `http://localhost:8085`  |
+| ms-datos          | `http://localhost:8083`  |
+| ms-kpis           | `http://localhost:8086`  |
 | front dev server  | `http://localhost:5173`  |
+| RabbitMQ UI       | `http://localhost:15672` |

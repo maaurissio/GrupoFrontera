@@ -1,11 +1,39 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { Icon } from './Icon';
 import { ModalOverlay } from './Primitives';
+import { useAuth } from '../context/AuthContext';
 
-export function Login({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState('c.rojas@cordillera.cl');
+export function Login() {
+  const { login } = useAuth();
+  const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const emailValid = email.includes('@') && email.includes('.');
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!emailValid || !pw) {
+      setError('Ingresa un correo válido y una contraseña.');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await login(email, pw);
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      if (status === 401) {
+        setError('Correo o contraseña incorrectos.');
+      } else {
+        setError('Ha ocurrido un error inesperado. Intente más tarde.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -17,29 +45,60 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <h1 className="ds-h2" style={{ margin: '0 0 4px', textAlign: 'center' }}>Plataforma Gerencial</h1>
           <p className="ds-sm" style={{ margin: '0 0 22px', textAlign: 'center' }}>Acceso interno · Grupo Cordillera</p>
 
-          <div className="field" style={{ marginBottom: 14 }}>
-            <label className="field-label">Correo corporativo</label>
-            <div className="search-wrap">
-              <Icon name="user" size={16} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)' }} />
-              <input className="input input-search" value={email} onChange={e => setEmail(e.target.value)} />
+          {error && (
+            <div role="alert" style={{ background: 'var(--color-danger-bg, rgba(239,68,68,.12))', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--color-danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Icon name="alert-circle" size={15} />
+              {error}
             </div>
-          </div>
+          )}
 
-          <div className="field" style={{ marginBottom: 20 }}>
-            <label className="field-label">Contraseña</label>
-            <div className="search-wrap">
-              <Icon name="lock" size={16} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)' }} />
-              <input className="input input-search" type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)} style={{ paddingRight: 36 }} />
-              <button onClick={() => setShow(!show)} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name={show ? 'eye-off' : 'eye'} size={15} />
-              </button>
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label className="field-label" htmlFor="login-email">Correo corporativo</label>
+              <div className="search-wrap">
+                <Icon name="user" size={16} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)' }} />
+                <input
+                  id="login-email"
+                  className="input input-search"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
             </div>
-          </div>
 
-          <button className="btn btn-primary" style={{ width: '100%', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={onLogin}>
-            Ingresar
-            <Icon name="arrow-up-right" size={16} />
-          </button>
+            <div className="field" style={{ marginBottom: 20 }}>
+              <label className="field-label" htmlFor="login-pw">Contraseña</label>
+              <div className="search-wrap">
+                <Icon name="lock" size={16} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)' }} />
+                <input
+                  id="login-pw"
+                  className="input input-search"
+                  type={show ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={pw}
+                  onChange={e => setPw(e.target.value)}
+                  style={{ paddingRight: 36 }}
+                  disabled={loading}
+                />
+                <button type="button" onClick={() => setShow(!show)} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name={show ? 'eye-off' : 'eye'} size={15} />
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: '100%', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              disabled={loading}
+            >
+              {loading ? <><Icon name="loader" size={16} />Ingresando…</> : <><Icon name="arrow-up-right" size={16} />Ingresar</>}
+            </button>
+          </form>
+
           <p className="ds-label" style={{ textAlign: 'center', marginTop: 16, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
             <Icon name="shield" size={12} />
             Conexión cifrada · Solo personal autorizado

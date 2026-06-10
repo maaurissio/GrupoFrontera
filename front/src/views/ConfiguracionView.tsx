@@ -2,36 +2,41 @@ import { useState } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Panel, Switch, ColorAvatar } from '../components/Primitives';
 import { usePrefs } from '../context/PrefsContext';
+import { useAuth } from '../context/AuthContext';
 import { DATA } from '../data';
 
 const CF_TABS = [
   { id: 'perfil',        label: 'Perfil',          icon: 'user' },
   { id: 'notif',         label: 'Notificaciones',  icon: 'bell' },
   { id: 'interfaz',      label: 'Interfaz',        icon: 'panel-left' },
-  { id: 'sucursales',    label: 'Sucursales',      icon: 'store' },
   { id: 'integraciones', label: 'Integraciones',   icon: 'zap' },
   { id: 'auditoria',     label: 'Auditoría',       icon: 'clock' },
   { id: 'seguridad',     label: 'Seguridad',       icon: 'shield' },
 ];
 
 function TabPerfil() {
-  const u = DATA.user;
-  const [name, setName] = useState(u.name);
-  const [email, setEmail] = useState('c.rojas@cordillera.cl');
+  const { usuario } = useAuth();
+  const [nombre, setNombre] = useState(usuario?.nombre ?? '');
+  const [apellido, setApellido] = useState(usuario?.apellido ?? '');
+  const [email] = useState(usuario?.email ?? '');
   const [saved, setSaved] = useState(false);
   function save() { setSaved(true); setTimeout(() => setSaved(false), 1500); }
+  const displayName = `${nombre} ${apellido}`.trim() || email;
+  const initials = ((nombre[0] ?? '') + (apellido[0] ?? '')).toUpperCase() || 'U';
+  const rol = (usuario?.roles ?? [])[0] ?? '';
   return (
     <div style={{ maxWidth: 520 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-        <ColorAvatar name={u.name} initials={u.initials} size={56} />
+        <ColorAvatar name={displayName} initials={initials} size={56} />
         <div>
-          <div className="ds-h3" style={{ fontSize: 18 }}>{name}</div>
-          <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>{u.role}</div>
+          <div className="ds-h3" style={{ fontSize: 18 }}>{displayName}</div>
+          <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>{rol}</div>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div className="field"><label className="field-label">Nombre</label><input className="input" value={name} onChange={e => setName(e.target.value)} /></div>
-        <div className="field"><label className="field-label">Email</label><input className="input" value={email} onChange={e => setEmail(e.target.value)} /></div>
+        <div className="field"><label className="field-label">Nombre</label><input className="input" value={nombre} onChange={e => setNombre(e.target.value)} /></div>
+        <div className="field"><label className="field-label">Apellido</label><input className="input" value={apellido} onChange={e => setApellido(e.target.value)} /></div>
+        <div className="field" style={{ gridColumn: '1 / -1' }}><label className="field-label">Email</label><input className="input" value={email} readOnly style={{ opacity: 0.7 }} /></div>
       </div>
       <div className="field" style={{ marginTop: 14 }}><label className="field-label">Cambiar contraseña</label><input className="input" type="password" placeholder="Nueva contraseña" /></div>
       <div className="field" style={{ marginTop: 14 }}><input className="input" type="password" placeholder="Confirmar contraseña" /></div>
@@ -155,32 +160,6 @@ function TabInterfaz() {
   );
 }
 
-function TabSucursales() {
-  return (
-    <div>
-      <div className="ds-sm" style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>Umbrales de stock mínimo por defecto y metas mensuales por sucursal.</div>
-      <table className="tbl">
-        <thead>
-          <tr><th>Sucursal</th><th style={{ textAlign: 'right' }}>Stock mín. default</th><th style={{ textAlign: 'right' }}>Meta mensual</th><th style={{ textAlign: 'right' }}>Meta actual (%)</th></tr>
-        </thead>
-        <tbody>
-          {DATA.branches.map(b => (
-            <tr key={b.name}>
-              <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{b.name}</td>
-              <td className="num"><input className="input" type="number" defaultValue={5} style={{ width: 64, height: 28, textAlign: 'right' }} /></td>
-              <td className="num"><input className="input" defaultValue="$1.000.000" style={{ width: 120, height: 28, textAlign: 'right', fontFamily: 'var(--font-mono)' }} /></td>
-              <td className="num" style={{ color: b.meta >= 100 ? 'var(--color-success)' : b.meta >= 70 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{b.meta}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-        <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="check-circle-2" size={14} />Guardar umbrales</button>
-      </div>
-    </div>
-  );
-}
-
 function TabIntegraciones() {
   return (
     <div>
@@ -240,8 +219,16 @@ function TabAuditoria() {
 }
 
 function TabSeguridad() {
+  const { logout } = useAuth();
   const [twofa, setTwofa] = useState(false);
   const [minLen, setMinLen] = useState(8);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    await logout();
+  }
+
   return (
     <div style={{ maxWidth: 600 }}>
       <div className="ds-h3" style={{ marginBottom: 16 }}>Autenticación en dos pasos (2FA)</div>
@@ -254,7 +241,7 @@ function TabSeguridad() {
         <Switch on={twofa} onClick={() => setTwofa(!twofa)} />
       </div>
       <div className="ds-h3" style={{ marginBottom: 16 }}>Política de contraseñas</div>
-      <div className="field" style={{ marginBottom: 18, maxWidth: 200 }}>
+      <div className="field" style={{ marginBottom: 24, maxWidth: 200 }}>
         <label className="field-label">Longitud mínima</label>
         <input className="input" type="number" min={6} max={32} value={minLen} onChange={e => setMinLen(parseInt(e.target.value) || 8)} style={{ width: 80 }} />
       </div>
@@ -278,6 +265,17 @@ function TabSeguridad() {
           </div>
         ))}
       </div>
+      <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--bg-border)' }}>
+        <button
+          className="btn btn-danger"
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          onClick={handleLogout}
+          disabled={loggingOut}
+        >
+          <Icon name="log-out" size={16} />
+          {loggingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -286,8 +284,7 @@ export function ConfiguracionView() {
   const [tab, setTab] = useState('perfil');
   const tabMap: Record<string, React.FC> = {
     perfil: TabPerfil, notif: TabNotif, interfaz: TabInterfaz,
-    sucursales: TabSucursales, integraciones: TabIntegraciones,
-    auditoria: TabAuditoria, seguridad: TabSeguridad,
+    integraciones: TabIntegraciones, auditoria: TabAuditoria, seguridad: TabSeguridad,
   };
   const View = tabMap[tab] || TabPerfil;
 
