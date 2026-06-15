@@ -59,12 +59,10 @@ export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
         })}
 
         <div className="ds-eyebrow" style={{ padding: '18px 10px 8px' }}>Sistema</div>
-        {(['reportesGuardados', 'configuracion'] as const).map((id) => {
-          const labels: Record<string, string> = { reportesGuardados: 'Reportes guardados', configuracion: 'Configuración' };
-          const icons:  Record<string, string> = { reportesGuardados: 'file-text',          configuracion: 'settings' };
-          const on = active === id;
+        {(() => {
+          const on = active === 'configuracion';
           return (
-            <button key={id} onClick={() => onNavigate(id)} style={{
+            <button onClick={() => onNavigate('configuracion')} style={{
               display: 'flex', alignItems: 'center', gap: 11, padding: '9px 10px',
               borderRadius: 8, border: 'none', cursor: 'pointer', textAlign: 'left',
               background: on ? 'var(--bg-surface-3)' : 'transparent',
@@ -74,10 +72,10 @@ export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
               onMouseEnter={e => { if (!on) { (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface-2)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; } }}
               onMouseLeave={e => { if (!on) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; } }}
             >
-              <Icon name={icons[id]} size={18} /> {labels[id]}
+              <Icon name="settings" size={18} /> Configuración
             </button>
           );
-        })}
+        })()}
       </nav>
 
       <div style={{ borderTop: '1px solid var(--bg-border)', padding: 12 }}>

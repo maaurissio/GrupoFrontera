@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import { ModalOverlay } from './Primitives';
 import { useAuth } from '../context/AuthContext';

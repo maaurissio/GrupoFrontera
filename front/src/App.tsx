@@ -6,34 +6,28 @@ import { Topbar } from './components/Topbar';
 import { PageHead, Button } from './components/Primitives';
 import { DashboardView } from './views/DashboardView';
 import { ReportesView } from './views/ReportesView';
-import { InventoryView } from './views/InventoryView';
 import { UsersView } from './views/UsersView';
 import { BranchesView } from './views/BranchesView';
-import { ReportesGuardadosView } from './views/ReportesGuardadosView';
 import { ConfiguracionView } from './views/ConfiguracionView';
 import { DatosView } from './views/DatosView';
 import type { ViewId } from './data';
 
 const TITLES: Record<ViewId, string> = {
-  dashboard:         'Resumen',
-  reportes:          'Reportes',
-  inventario:        'Inventario',
-  usuarios:          'Usuarios',
-  sucursales:        'Sucursales',
-  reportesGuardados: 'Reportes guardados',
-  configuracion:     'Configuración',
-  datos:             'Datos consolidados',
+  dashboard:     'Resumen',
+  reportes:      'Reportes',
+  usuarios:      'Usuarios',
+  sucursales:    'Sucursales',
+  configuracion: 'Configuración',
+  datos:         'Datos consolidados',
 };
 
 const SUBTITLES: Record<ViewId, string> = {
-  dashboard:         'Estado operacional en tiempo real · Grupo Cordillera',
-  reportes:          'KPIs por sucursal y período · exportables',
-  inventario:        'Stock por producto y alertas de quiebre',
-  usuarios:          'Roles, sucursales y estado de cuentas',
-  sucursales:        'Red de sucursales · ubicación y cobertura',
-  reportesGuardados: 'Historial, favoritos y reportes programados',
-  configuracion:     'Preferencias del sistema y tu cuenta',
-  datos:             'Ingesta, validación y trazabilidad de datos',
+  dashboard:     'Estado operacional en tiempo real · Grupo Cordillera',
+  reportes:      'KPIs por sucursal y período · exportables',
+  usuarios:      'Roles, sucursales y estado de cuentas',
+  sucursales:    'Red de sucursales · ubicación y cobertura',
+  configuracion: 'Preferencias del sistema y tu cuenta',
+  datos:         'Ingesta, validación y trazabilidad de datos',
 };
 
 function AppShell() {
@@ -49,15 +43,13 @@ function AppShell() {
 
   const renderView = () => {
     switch (view) {
-      case 'dashboard':         return <DashboardView onNavigate={navigate} />;
-      case 'reportes':          return <ReportesView />;
-      case 'inventario':        return <InventoryView />;
-      case 'usuarios':          return <UsersView />;
-      case 'sucursales':        return <BranchesView />;
-      case 'reportesGuardados': return <ReportesGuardadosView />;
-      case 'configuracion':     return <ConfiguracionView />;
-      case 'datos':             return <DatosView />;
-      default:                  return <DashboardView onNavigate={navigate} />;
+      case 'dashboard':     return <DashboardView onNavigate={navigate} />;
+      case 'reportes':      return <ReportesView />;
+      case 'usuarios':      return <UsersView />;
+      case 'sucursales':    return <BranchesView />;
+      case 'configuracion': return <ConfiguracionView />;
+      case 'datos':         return <DatosView />;
+      default:              return <DashboardView onNavigate={navigate} />;
     }
   };
 
@@ -78,7 +70,7 @@ function AppShell() {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar active={view} onNavigate={navigate} onLogout={logout} />
       <main ref={scrollRef} className="ds-scroll" style={{ flex: 1, overflowY: 'auto', height: '100%', position: 'relative' }}>
-        <Topbar title={TITLES[view]} alerts={7} onExport={() => setExporting(true)} />
+        <Topbar title={TITLES[view]} alerts={2} onExport={() => setExporting(true)} />
         <div style={{ padding: '28px 28px 48px' }}>
           <PageHead title={TITLES[view]} subtitle={SUBTITLES[view]}>
             {headerActions()}

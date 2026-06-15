@@ -1,17 +1,14 @@
 import { useState } from 'react';
 import { Icon } from '../components/Icon';
-import { Badge, Panel, Switch, ColorAvatar } from '../components/Primitives';
+import { Panel, Switch, ColorAvatar } from '../components/Primitives';
 import { usePrefs } from '../context/PrefsContext';
 import { useAuth } from '../context/AuthContext';
-import { DATA } from '../data';
 
 const CF_TABS = [
-  { id: 'perfil',        label: 'Perfil',          icon: 'user' },
-  { id: 'notif',         label: 'Notificaciones',  icon: 'bell' },
-  { id: 'interfaz',      label: 'Interfaz',        icon: 'panel-left' },
-  { id: 'integraciones', label: 'Integraciones',   icon: 'zap' },
-  { id: 'auditoria',     label: 'Auditoría',       icon: 'clock' },
-  { id: 'seguridad',     label: 'Seguridad',       icon: 'shield' },
+  { id: 'perfil',    label: 'Perfil',         icon: 'user' },
+  { id: 'notif',     label: 'Notificaciones', icon: 'bell' },
+  { id: 'interfaz',  label: 'Interfaz',       icon: 'panel-left' },
+  { id: 'seguridad', label: 'Seguridad',      icon: 'shield' },
 ];
 
 function TabPerfil() {
@@ -160,64 +157,6 @@ function TabInterfaz() {
   );
 }
 
-function TabIntegraciones() {
-  return (
-    <div>
-      <div className="ds-sm" style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>Conexiones con sistemas externos. Contacta a soporte para configurar nuevas integraciones.</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {DATA.integraciones.map(s => (
-          <div key={s.nombre} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'var(--bg-surface-1)', border: '1px solid var(--bg-border)', borderRadius: 10 }}>
-            <span style={{ width: 36, height: 36, borderRadius: 8, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface-3)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)' }}>
-              <Icon name={s.icon} size={16} />
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{s.nombre}</div>
-              <div className="ds-label" style={{ fontSize: 11 }}>{s.desc}</div>
-            </div>
-            <div style={{ textAlign: 'right', width: 100, flex: 'none' }}>
-              <div className="ds-label" style={{ fontSize: 10 }}>Última sync</div>
-              <div className="ds-mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.ultimaSync}</div>
-            </div>
-            <Badge kind={s.kind}>{s.estado}</Badge>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TabAuditoria() {
-  const [q, setQ] = useState('');
-  const rows = DATA.auditLog.filter(a => q === '' || a.usuario.toLowerCase().includes(q.toLowerCase()) || a.accion.toLowerCase().includes(q.toLowerCase()));
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>Registro de acciones de los usuarios del sistema.</div>
-        <div className="search-wrap" style={{ width: 220 }}>
-          <Icon name="search" size={15} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)', pointerEvents: 'none' }} />
-          <input className="input input-search" placeholder="Buscar acción o usuario…" value={q} onChange={e => setQ(e.target.value)} style={{ height: 32 }} />
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {rows.map((a, i) => (
-          <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 14px', background: 'var(--bg-surface-1)', border: '1px solid var(--bg-border)', borderRadius: 8 }}>
-            <span className="ds-mono" style={{ width: 140, flex: 'none', fontSize: 11, color: 'var(--text-disabled)' }}>{a.fecha}</span>
-            <span className="ds-sm" style={{ width: 120, flex: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>{a.usuario}</span>
-            <span className="ds-sm" style={{ flex: 1, color: 'var(--text-primary)' }}>{a.accion}</span>
-            <span className="ds-label" style={{ flex: 'none', fontSize: 11 }}>{a.detalle}</span>
-          </div>
-        ))}
-        {rows.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            <Icon name="search" size={18} style={{ color: 'var(--text-disabled)' }} />
-            <div className="ds-sm" style={{ marginTop: 6 }}>Sin resultados</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function TabSeguridad() {
   const { logout } = useAuth();
   const [twofa, setTwofa] = useState(false);
@@ -245,26 +184,6 @@ function TabSeguridad() {
         <label className="field-label">Longitud mínima</label>
         <input className="input" type="number" min={6} max={32} value={minLen} onChange={e => setMinLen(parseInt(e.target.value) || 8)} style={{ width: 80 }} />
       </div>
-      <div className="ds-h3" style={{ marginBottom: 16 }}>Sesiones activas</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {DATA.sesiones.map((s, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'var(--bg-surface-1)', border: '1px solid var(--bg-border)', borderRadius: 10 }}>
-            <Icon name="monitor" size={16} style={{ color: 'var(--text-secondary)' }} />
-            <div style={{ flex: 1 }}>
-              <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-                {s.dispositivo}
-                {s.actual && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--color-success)', fontWeight: 600 }}>Sesión actual</span>}
-              </div>
-              <div className="ds-label" style={{ fontSize: 11 }}>IP {s.ip} · desde {s.inicio}</div>
-            </div>
-            {!s.actual && (
-              <button className="btn btn-ghost btn-sm" style={{ height: 28, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Icon name="x" size={12} />Cerrar
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
       <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--bg-border)' }}>
         <button
           className="btn btn-danger"
@@ -283,8 +202,7 @@ function TabSeguridad() {
 export function ConfiguracionView() {
   const [tab, setTab] = useState('perfil');
   const tabMap: Record<string, React.FC> = {
-    perfil: TabPerfil, notif: TabNotif, interfaz: TabInterfaz,
-    integraciones: TabIntegraciones, auditoria: TabAuditoria, seguridad: TabSeguridad,
+    perfil: TabPerfil, notif: TabNotif, interfaz: TabInterfaz, seguridad: TabSeguridad,
   };
   const View = tabMap[tab] || TabPerfil;
 

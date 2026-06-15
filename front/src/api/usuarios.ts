@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { UsuarioDTO, UsuarioCreatePayload } from './types';
+import type { UsuarioDTO, UsuarioCreatePayload } from './types';
 
 export function listarUsuarios(signal?: AbortSignal): Promise<UsuarioDTO[]> {
   return apiFetch<UsuarioDTO[]>('/api/bff/usuarios', {}, signal);

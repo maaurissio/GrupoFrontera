@@ -20,7 +20,7 @@ services:
     depends_on:
       - db-auth
     ports:
-      - "8081:8081"
+      - "8088:8088"
     environment:
       QUARKUS_DATASOURCE_DB_KIND: postgresql
       QUARKUS_DATASOURCE_USERNAME: usuario_cordillera

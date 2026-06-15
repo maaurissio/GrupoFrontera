@@ -50,10 +50,9 @@ export interface DatoConsolidadoDTO {
 
 export interface LogTrazabilidadDTO {
   id: number;
-  datoId: number;
-  estado: string;
-  mensaje: string;
-  fechaRegistro: string;
+  accion: string;
+  detalle: string;
+  createdAt: string;
 }
 
 export interface LoginResponse {
@@ -80,8 +79,10 @@ export interface SucursalCreatePayload {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 

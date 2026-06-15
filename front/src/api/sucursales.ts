@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { SucursalDTO, SucursalCreatePayload } from './types';
+import type { SucursalDTO, SucursalCreatePayload } from './types';
 
 export function listarSucursales(signal?: AbortSignal): Promise<SucursalDTO[]> {
   return apiFetch<SucursalDTO[]>('/api/bff/sucursales', {}, signal);

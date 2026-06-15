@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../components/Icon';
-import { Badge, Delta, Panel, ColorAvatar } from '../components/Primitives';
+import { Badge, Delta, Panel } from '../components/Primitives';
 import { LineChart } from '../components/Chart';
 import { DATA } from '../data';
 import type { ViewId } from '../data';
@@ -8,7 +8,6 @@ import { listarSucursales } from '../api/sucursales';
 import { obtenerKpis } from '../api/kpis';
 import { ApiError } from '../api/types';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
-import { useDebounce } from '../hooks/useDebounce';
 
 function currentPeriodo(): string {
   const now = new Date();
@@ -114,16 +113,9 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
   const [sucursalId, setSucursalId] = useState<number | null>(null);
   const [periodo, setPeriodo] = useState(currentPeriodo());
-  const [kpiData, setKpiData] = useState<RespuestaKpis | null>(null);
+  const [, setKpiData] = useState<RespuestaKpis | null>(null);
   const [kpiStatus, setKpiStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
   const [kpiCards, setKpiCards] = useState<KpiCard[]>([]);
-
-  const [q, setQ] = useState('');
-  const debouncedQ = useDebounce(q);
-  const filtered = DATA.ventasRecientes.filter(v =>
-    v.sucursal.toLowerCase().includes(debouncedQ.toLowerCase()) ||
-    v.vendedor.toLowerCase().includes(debouncedQ.toLowerCase())
-  );
 
   useEffect(() => {
     const ac = new AbortController();
@@ -228,7 +220,6 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
         <div className="ds-label" style={{ fontSize: 11, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-disabled)' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)' }} />
           {sucursalNombre ? `${sucursalNombre} · ${periodo}` : 'Selecciona sucursal y período'}
-          {kpiData && ` · Calculado: ${new Date(kpiData.fechaCalculoVentas ?? '').toLocaleDateString('es-CL')}`}
         </div>
       </div>
 
@@ -265,46 +256,6 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
         </div>
       </div>
 
-      {/* ventas recientes */}
-      <Panel style={{ padding: 0 }} bodyStyle={{ padding: 0 }} title="Ventas recientes" action={
-        <div className="search-wrap" style={{ width: 220 }}>
-          <Icon name="search" size={15} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)', pointerEvents: 'none' }} />
-          <input className="input input-search" placeholder="Buscar sucursal o vendedor…" value={q} onChange={e => setQ(e.target.value)} style={{ height: 32 }} />
-        </div>
-      }>
-        <table className="tbl">
-          <thead>
-            <tr><th>Sucursal</th><th>Vendedor</th><th style={{ textAlign: 'right' }}>Monto</th><th style={{ textAlign: 'right' }}>Fecha</th></tr>
-          </thead>
-          <tbody>
-            {filtered.map(v => (
-              <tr key={v.id}>
-                <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{v.sucursal}</td>
-                <td>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-                    <ColorAvatar name={v.vendedor} initials={v.vendedor.split(' ').map(p => p[0]).slice(0, 2).join('')} size={28} />
-                    <span style={{ color: 'var(--text-primary)' }}>{v.vendedor}</span>
-                  </span>
-                </td>
-                <td className="num">{v.monto}</td>
-                <td className="num" style={{ color: 'var(--text-secondary)' }} title={v.full}>{v.ago}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 && (
-          <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-            <Icon name="search" size={20} style={{ color: 'var(--text-disabled)' }} />
-            <div className="ds-sm" style={{ marginTop: 8 }}>Sin resultados para tu búsqueda</div>
-          </div>
-        )}
-        <div style={{ borderTop: '1px solid var(--bg-border)', padding: '12px 16px', textAlign: 'center' }}>
-          <button onClick={() => onNavigate?.('reportes')} className="ds-label"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--link-fg)', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            Ver todas las ventas <Icon name="arrow-right" size={12} />
-          </button>
-        </div>
-      </Panel>
     </div>
   );
 }

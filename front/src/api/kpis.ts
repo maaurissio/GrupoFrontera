@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { RespuestaKpis } from './types';
+import type { RespuestaKpis } from './types';
 
 export function obtenerKpis(sucursalId: number, periodo: string, signal?: AbortSignal): Promise<RespuestaKpis> {
   return apiFetch<RespuestaKpis>(`/api/bff/kpis?sucursalId=${sucursalId}&periodo=${encodeURIComponent(periodo)}`, {}, signal);

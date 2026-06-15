@@ -10,5 +10,5 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/target/quarkus-app/ ./
 
-EXPOSE 8081
+EXPOSE 8090
 ENTRYPOINT ["java", "-jar", "quarkus-run.jar"]

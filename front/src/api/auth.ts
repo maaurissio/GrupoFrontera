@@ -1,4 +1,4 @@
-import { LoginResponse } from './types';
+import type { LoginResponse } from './types';
 
 const BFF_URL = 'http://localhost:8090';
 

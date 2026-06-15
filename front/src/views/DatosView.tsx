@@ -45,15 +45,15 @@ function LogTimeline({ id, onClose }: { id: number; onClose: () => void }) {
           {log.map((entry, i) => (
             <div key={entry.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', paddingBottom: i < log.length - 1 ? 12 : 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--color-' + (ESTADO_KIND[entry.estado] || 'neutral') + ')', flex: 'none', marginTop: 2 }} />
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--color-' + (ESTADO_KIND[entry.accion] || 'neutral') + ')', flex: 'none', marginTop: 2 }} />
                 {i < log.length - 1 && <div style={{ width: 2, flex: 1, background: 'var(--bg-border)', minHeight: 12 }} />}
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Badge kind={ESTADO_KIND[entry.estado] || 'neutral'}>{entry.estado}</Badge>
-                  <span className="ds-label" style={{ fontSize: 11 }}>{formatDate(entry.fechaRegistro)}</span>
+                  <Badge kind={ESTADO_KIND[entry.accion] || 'neutral'}>{entry.accion}</Badge>
+                  <span className="ds-label" style={{ fontSize: 11 }}>{formatDate(entry.createdAt)}</span>
                 </div>
-                {entry.mensaje && <div className="ds-sm" style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{entry.mensaje}</div>}
+                {entry.detalle && <div className="ds-sm" style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{entry.detalle}</div>}
               </div>
             </div>
           ))}

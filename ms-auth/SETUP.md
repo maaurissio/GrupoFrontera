@@ -16,8 +16,8 @@ docker-compose up -d db-auth
 ```
 
 La app queda disponible en:
-- API: `http://localhost:8081`
-- Swagger UI: `http://localhost:8081/swagger-ui`
+- API: `http://localhost:8088`
+- Swagger UI: `http://localhost:8088/swagger-ui`
 
 ---
 

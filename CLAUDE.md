@@ -16,7 +16,7 @@ Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`,
 | `ms-auth`     | Authentication & JWT         | **Fully implemented** — JWT HS384, BCrypt, refresh tokens |
 | `ms-datos`    | Data ingestion               | Scaffold — implemented, requires manual DB container    |
 | `ms-kpis`     | KPI computation              | Scaffold — implemented, requires RabbitMQ + seed data   |
-| `ms-reportes` | Reporting                    | Scaffold                                                |
+| `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI) |
 | `bff`         | Backend-for-frontend         | **Fully implemented** — integra todos los microservicios |
 | `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 8 vistas      |
 
@@ -30,10 +30,11 @@ Esta máquina tiene servicios Windows que ocupan puertos por defecto. Los puerto
 
 | Servicio    | Puerto HTTP | Puerto BD (host) | BD name        |
 |-------------|-------------|------------------|----------------|
-| `ms-auth`   | **8081**    | 5435             | db_auth        |
+| `ms-auth`   | **8088**    | 5435             | db_auth        |
 | `ms-users`  | **8085** ⚠️ | 5434             | db_users       |
-| `ms-datos`  | **8083** ⚠️ | **5437** ⚠️      | grupofrontera  |
+| `ms-datos`  | **8089** ⚠️ | **5437** ⚠️      | grupofrontera  |
 | `ms-kpis`   | **8086**    | 5438             | kpis_db        |
+| `ms-reportes` | **8087**  | —                | —              |
 | `bff`       | **8090**    | —                | —              |
 | `front`     | **5173**    | —                | —              |
 
@@ -86,9 +87,9 @@ cd bff       && .\mvnw.cmd quarkus:dev   # terminal 5
 cd front     && npm run dev              # terminal 6
 
 # 7. Registrar credenciales en ms-auth (solo si ms-auth se reinició — su import.sql está vacío)
-curl -X POST http://localhost:8081/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"d1111111-1111-1111-1111-111111111111\",\"email\":\"admin@cordillera.cl\",\"password\":\"Admin1234!\"}"
-curl -X POST http://localhost:8081/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"e2222222-2222-2222-2222-222222222222\",\"email\":\"soporte@cordillera.cl\",\"password\":\"Soporte1234!\"}"
-curl -X POST http://localhost:8081/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"f3333333-3333-3333-3333-333333333333\",\"email\":\"gerente@cordillera.cl\",\"password\":\"Gerente1234!\"}"
+curl -X POST http://localhost:8088/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"d1111111-1111-1111-1111-111111111111\",\"email\":\"admin@cordillera.cl\",\"password\":\"Admin1234!\"}"
+curl -X POST http://localhost:8088/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"e2222222-2222-2222-2222-222222222222\",\"email\":\"soporte@cordillera.cl\",\"password\":\"Soporte1234!\"}"
+curl -X POST http://localhost:8088/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"f3333333-3333-3333-3333-333333333333\",\"email\":\"gerente@cordillera.cl\",\"password\":\"Gerente1234!\"}"
 ```
 
 ---
@@ -135,7 +136,7 @@ ms-users siembra 3 usuarios. ms-auth tiene el import.sql **vacío** — las cred
 
 ## ms-auth — Authentication microservice
 
-**Fully implemented.** Port **8081**, DB db_auth (port 5435). See `ms-auth/SETUP.md`.
+**Fully implemented.** Port **8088**, DB db_auth (port 5435). See `ms-auth/SETUP.md`.
 
 ### Endpoints
 
@@ -160,9 +161,9 @@ ms-users siembra 3 usuarios. ms-auth tiene el import.sql **vacío** — las cred
 ### Integration flow (via BFF)
 
 ```
-POST /api/bff/auth/login    → bff:8090 → ms-auth:8081  → returns { usuarioId, email, accessToken, refreshToken }
-POST /api/bff/auth/refresh  → bff:8090 → ms-auth:8081
-POST /api/bff/auth/logout   → bff:8090 → ms-auth:8081
+POST /api/bff/auth/login    → bff:8090 → ms-auth:8088  → returns { usuarioId, email, accessToken, refreshToken }
+POST /api/bff/auth/refresh  → bff:8090 → ms-auth:8088
+POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 ```
 
 ---
@@ -312,9 +313,9 @@ Basado en el **Cordillera Design System** (`design-handoff/cordillera-design-sys
 | Servicio          | URL                      |
 |-------------------|--------------------------|
 | BFF               | `http://localhost:8090`  |
-| ms-auth           | `http://localhost:8081`  |
+| ms-auth           | `http://localhost:8088`  |
 | ms-users          | `http://localhost:8085`  |
-| ms-datos          | `http://localhost:8083`  |
+| ms-datos          | `http://localhost:8089`  |
 | ms-kpis           | `http://localhost:8086`  |
 | front dev server  | `http://localhost:5173`  |
 | RabbitMQ UI       | `http://localhost:15672` |

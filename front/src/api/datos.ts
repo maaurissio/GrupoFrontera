@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { DatoConsolidadoDTO, LogTrazabilidadDTO } from './types';
+import type { DatoConsolidadoDTO, LogTrazabilidadDTO } from './types';
 
 export interface DatosFiltros {
   sucursalId?: number;

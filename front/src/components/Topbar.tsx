@@ -1,15 +1,9 @@
 import { useState } from 'react';
 import { Icon } from './Icon';
 import { Badge } from './Primitives';
-import { DATA } from '../data';
 
 function NotificationsDropdown({ onClose }: { onClose: () => void }) {
   const alerts = [
-    ...DATA.inventario.filter(p => (p.pres + p.online) < p.min).map(p => ({
-      type: 'stock', title: p.name,
-      desc: p.branch + ' · stock ' + (p.pres + p.online) + ' de mín. ' + p.min,
-      kind: (p.pres + p.online) === 0 ? 'danger' : 'warning', icon: 'package', ago: 'hace 15 min',
-    })),
     { type: 'service', title: 'Motor de KPIs degradado', desc: 'Latencia elevada · 310 ms', kind: 'warning', icon: 'activity', ago: 'hace 42 min' },
     { type: 'service', title: 'Sincronización caída', desc: 'Sin conexión entre sedes', kind: 'danger', icon: 'wifi', ago: 'hace 2 horas' },
   ];

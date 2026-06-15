@@ -8,9 +8,9 @@
 
 | Servicio    | Puerto asignado | Estado       | Observación |
 |-------------|----------------|--------------|-------------|
-| ms-auth     | 8081           | ✅ Operativo  | — |
+| ms-auth     | **8088**       | ✅ Operativo  | Puerto cambiado (todos los ms ≥ 8085) |
 | ms-users    | **8085**       | ✅ Operativo  | Puerto cambiado (ver conflictos) |
-| ms-datos    | **8083**       | ❌ No arranca | Requiere acciones manuales (ver abajo) |
+| ms-datos    | **8089**       | ❌ No arranca | Requiere acciones manuales (ver abajo) |
 | ms-kpis     | 8086           | ⚠️ Parcial   | Arranca, pero sin datos de KPI |
 | BFF         | 8090           | ✅ Operativo  | — |
 | Frontend    | 5173           | ✅ Operativo  | `npm run dev` desde `front/` |
