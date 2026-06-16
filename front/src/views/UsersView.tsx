@@ -61,8 +61,12 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
   async function handleSubmit() {
     const errs: FieldError = {};
     if (!rut || !dv) { errs.rut = 'El RUT es obligatorio.'; }
+    else if (rut.length > 9) { errs.rut = 'El RUT no puede tener más de 9 dígitos.'; }
+    else if (!/^[0-9K]$/.test(dv)) { errs.rut = 'El dígito verificador debe ser un número (0-9) o la letra K.'; }
     else if (!validarRut(rut, dv)) { errs.rut = 'El dígito verificador del RUT no es válido.'; }
+    if (!nombre.trim() || !apellido.trim()) { errs.general = 'Nombre y apellido son obligatorios.'; }
     if (!email.includes('@')) { errs.email = 'Ingresa un email válido.'; }
+    if (pw.length < 8) { errs.general = 'La contraseña debe tener al menos 8 caracteres.'; }
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
 
     setErrors({});
@@ -101,13 +105,13 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
           <div className="field">
-            <label className="field-label">RUT (sin puntos ni guión) *</label>
-            <input className="input" placeholder="15482991" value={rut} onChange={e => setRut(e.target.value.replace(/\D/g, ''))} />
+            <label className="field-label">RUT (sin puntos ni guión, máx. 9 dígitos) *</label>
+            <input className="input" placeholder="15482991" maxLength={9} value={rut} onChange={e => setRut(e.target.value.replace(/\D/g, '').slice(0, 9))} />
             {errors.rut && <span style={{ fontSize: 12, color: 'var(--color-danger)', marginTop: 4, display: 'block' }}>{errors.rut}</span>}
           </div>
           <div className="field">
             <label className="field-label">DV *</label>
-            <input className="input" placeholder="2 o K" maxLength={1} value={dv} onChange={e => setDv(e.target.value)} />
+            <input className="input" placeholder="2 o K" maxLength={1} value={dv} onChange={e => setDv(e.target.value.replace(/[^0-9kK]/g, '').toUpperCase().slice(0, 1))} />
           </div>
         </div>
 

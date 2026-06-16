@@ -38,6 +38,8 @@ public class SucursalResource {
         sucursal.codigo = request.codigo;
         sucursal.nombre = request.nombre;
         sucursal.ciudad = request.ciudad;
+        sucursal.latitud = request.latitud;
+        sucursal.longitud = request.longitud;
 
         Sucursal creada = sucursalService.crear(sucursal);
         return Response.status(Response.Status.CREATED)
@@ -70,6 +72,8 @@ public class SucursalResource {
             datos.codigo = request.codigo;
             datos.nombre = request.nombre;
             datos.ciudad = request.ciudad;
+            datos.latitud = request.latitud;
+            datos.longitud = request.longitud;
 
             Sucursal actualizada = sucursalService.actualizar(id, datos);
             return Response.ok(SucursalResponse.fromEntity(actualizada)).build();

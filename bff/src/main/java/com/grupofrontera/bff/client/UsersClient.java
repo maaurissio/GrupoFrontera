@@ -25,6 +25,9 @@ public interface UsersClient {
     @GET @Path("/usuarios")
     List<Object> listarUsuarios();
 
+    @GET @Path("/usuarios/todos")
+    List<Object> listarTodosUsuarios();
+
     @GET @Path("/usuarios/{id}")
     Object obtenerUsuario(@PathParam("id") UUID id);
 

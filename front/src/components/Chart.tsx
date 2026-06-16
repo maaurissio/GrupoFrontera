@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-interface ChartData { months: string[]; ventas: number[]; tx: number[]; }
+interface ChartData { months: string[]; ventas: number[]; tx: number[]; fullLabels?: string[]; }
 
 function clp(millions: number) {
   const n = Math.round(millions * 1000000);
@@ -16,7 +16,7 @@ function getChartLineColor() {
 }
 
 export function LineChart({ data, height = 220 }: { data: ChartData; height?: number }) {
-  const { months, ventas, tx } = data;
+  const { months, ventas, tx, fullLabels } = data;
   const [hover, setHover] = useState(ventas.length - 1);
   const [accent, setAccent] = useState(() => getCSSVar('--color-info') || '#3B82F6');
   const [lineColor, setLineColor] = useState(getChartLineColor);
@@ -33,11 +33,12 @@ export function LineChart({ data, height = 220 }: { data: ChartData; height?: nu
 
   const single = months.length === 1;
   const W = 760, H = height, padL = 40, padR = 16, padTop = 16, padBot = 30;
-  const max = Math.max(...ventas) * 1.12;
+  const max = Math.max(...ventas) * 1.12 || 1;
   const min = Math.min(...ventas) * 0.82;
+  const span = (max - min) || 1;
   const n = months.length;
   const x = (i: number) => padL + (n === 1 ? (W - padL - padR) / 2 : (i * (W - padL - padR)) / (n - 1));
-  const y = (v: number) => padTop + (1 - (v - min) / (max - min)) * (H - padTop - padBot);
+  const y = (v: number) => padTop + (1 - (v - min) / span) * (H - padTop - padBot);
   const path = ventas.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const area = `${path} L${x(n - 1)},${H - padBot} L${x(0)},${H - padBot} Z`;
   const yticks = [max, (max + min) / 2, min];
@@ -90,7 +91,7 @@ export function LineChart({ data, height = 220 }: { data: ChartData; height?: nu
         borderRadius: 8, padding: '8px 11px', pointerEvents: 'none',
         boxShadow: 'var(--shadow-pop)', whiteSpace: 'nowrap',
       }}>
-        <div className="ds-eyebrow" style={{ marginBottom: 5 }}>{months[hover]} 2026</div>
+        <div className="ds-eyebrow" style={{ marginBottom: 5 }}>{fullLabels?.[hover] ?? months[hover]}</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--text-white)' }}>{clp(ventas[hover])}</div>
         <div className="ds-sm" style={{ fontSize: 11, marginTop: 2 }}>{tx[hover].toLocaleString('es-CL')} transacciones</div>
       </div>

@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Delta, Panel } from '../components/Primitives';
 import { LineChart } from '../components/Chart';
-import { DATA } from '../data';
 import { listarSucursales } from '../api/sucursales';
 import { obtenerComparativo } from '../api/kpis';
 import { exportarReporte } from '../api/reportes';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
+import { ultimosMeses, type ChartSeries } from '../utils/periodo';
 
 function currentPeriodo(): string {
   const now = new Date();
@@ -28,6 +28,8 @@ export function ReportesView() {
   const [loadingData, setLoadingData] = useState(false);
   const [errorData, setErrorData] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [chartData, setChartData] = useState<ChartSeries | null>(null);
+  const [chartStatus, setChartStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
 
   useEffect(() => {
     const ac = new AbortController();
@@ -52,6 +54,43 @@ export function ReportesView() {
   useEffect(() => {
     if (periodo) fetchComparativo(periodo);
   }, [periodo, fetchComparativo]);
+
+  const fetchChart = useCallback(async (per: string, suc: number | 'all') => {
+    setChartStatus('loading');
+    const meses = ultimosMeses(per, 6);
+    try {
+      const porMes = await Promise.all(
+        meses.map(mo => obtenerComparativo(mo.periodo).catch(() => [] as RespuestaKpis[])),
+      );
+      // Por mes: si el filtro es "todas", agrega todas las sucursales; si no, toma la seleccionada.
+      const agregados = porMes.map(rows => {
+        const sel = suc === 'all' ? rows : rows.filter(r => r.sucursalId === suc);
+        return {
+          ventas: sel.reduce((s, r) => s + Number(r.totalVentas), 0),
+          tx: sel.reduce((s, r) => s + Number(r.cantidadTransacciones), 0),
+          hay: sel.length > 0,
+        };
+      });
+      if (!agregados.some(a => a.hay)) {
+        setChartData(null);
+        setChartStatus('nodata');
+        return;
+      }
+      setChartData({
+        months: meses.map(m => m.corto),
+        fullLabels: meses.map(m => m.full),
+        ventas: agregados.map(a => a.ventas / 1_000_000),
+        tx: agregados.map(a => a.tx),
+      });
+      setChartStatus('idle');
+    } catch {
+      setChartStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (periodo) fetchChart(periodo, sucursalId);
+  }, [periodo, sucursalId, fetchChart]);
 
   async function doExport(fmt: 'pdf' | 'xlsx') {
     if (sucursalId === 'all') return;
@@ -152,8 +191,27 @@ export function ReportesView() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.55fr) minmax(0,1fr)', gap: 16 }}>
-        <Panel title="Ventas en el tiempo">
-          <LineChart data={DATA.chart} height={220} />
+        <Panel title="Ventas en el tiempo" action={
+          chartData && <span className="ds-label">{chartData.fullLabels[0]} – {chartData.fullLabels[chartData.fullLabels.length - 1]}</span>
+        }>
+          {chartStatus === 'loading' ? (
+            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="loader" size={20} style={{ color: 'var(--text-disabled)' }} />
+            </div>
+          ) : chartStatus === 'error' ? (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="alert-circle" size={22} style={{ color: 'var(--color-danger)' }} />
+              <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>Error al cargar la serie</div>
+              <button className="btn btn-ghost btn-sm" onClick={() => fetchChart(periodo, sucursalId)}>Reintentar</button>
+            </div>
+          ) : chartData ? (
+            <LineChart data={chartData} height={220} />
+          ) : (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="inbox" size={24} style={{ color: 'var(--text-disabled)' }} />
+              <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>No hay ventas registradas en el período</div>
+            </div>
+          )}
         </Panel>
         <Panel title="Indicadores de inventario">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

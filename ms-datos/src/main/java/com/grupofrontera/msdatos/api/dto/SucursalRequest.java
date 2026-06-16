@@ -12,4 +12,8 @@ public class SucursalRequest {
 
     @NotBlank(message = "La ciudad es obligatoria")
     public String ciudad;
+
+    public Double latitud;
+
+    public Double longitud;
 }

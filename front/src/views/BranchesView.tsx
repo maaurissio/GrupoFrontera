@@ -6,25 +6,33 @@ import type { SucursalDTO } from '../api/types';
 
 declare const maplibregl: any;
 
-const MAP_STYLE = {
-  version: 8,
-  sources: {
-    carto: {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '© OpenStreetMap © CARTO',
+function currentTheme(): 'light' | 'dark' {
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+}
+
+// Estilo del mapa según el tema: tiles light_all / dark_all de CARTO.
+function makeMapStyle(theme: 'light' | 'dark') {
+  const variant = theme === 'light' ? 'light_all' : 'dark_all';
+  return {
+    version: 8,
+    sources: {
+      carto: {
+        type: 'raster',
+        tiles: [
+          `https://a.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}.png`,
+          `https://b.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}.png`,
+          `https://c.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}.png`,
+        ],
+        tileSize: 256,
+        attribution: '© OpenStreetMap © CARTO',
+      },
     },
-  },
-  layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0F0F0F' } },
-    { id: 'carto', type: 'raster', source: 'carto' },
-  ],
-};
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': theme === 'light' ? '#E8E8E8' : '#0F0F0F' } },
+      { id: 'carto', type: 'raster', source: 'carto' },
+    ],
+  };
+}
 
 const COORDS: Record<string, { lat: number; lng: number }> = {
   'Santiago Centro': { lat: -33.4489, lng: -70.6693 },
@@ -41,6 +49,20 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const readyRef = useRef(false);
+  const coordsRef = useRef<[number, number]>([lng, lat]);
+
+  function addMarkers(map: any) {
+    if (map.getSource('b')) return;
+    map.addSource('b', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'b-halo', type: 'circle', source: 'b', paint: { 'circle-radius': 13, 'circle-color': '#3B82F6', 'circle-opacity': 0.18 } });
+    map.addLayer({ id: 'b-dot',  type: 'circle', source: 'b', paint: { 'circle-radius': 6,  'circle-color': '#3B82F6', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 } });
+    paint(map);
+  }
+
+  function paint(m: any) {
+    const [lo, la] = coordsRef.current;
+    m?.getSource('b')?.setData({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lo, la] } }] });
+  }
 
   useEffect(() => {
     if (!window.maplibregl && !mapRef.current) {
@@ -48,36 +70,39 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
     } else { init(); }
 
     function init() {
-      if (!maplibregl || !elRef.current) return;
+      if (!maplibregl || !elRef.current || mapRef.current) return;
       import('maplibre-gl/dist/maplibre-gl.css').catch(() => {});
       const map = new maplibregl.Map({
-        container: elRef.current, style: MAP_STYLE,
-        center: [lng, lat], zoom: 15.5,
+        container: elRef.current, style: makeMapStyle(currentTheme()),
+        center: coordsRef.current, zoom: 15.5,
         attributionControl: { compact: true },
       });
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
-      map.on('load', () => {
-        map.addSource('b', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-        map.addLayer({ id: 'b-halo', type: 'circle', source: 'b', paint: { 'circle-radius': 13, 'circle-color': '#3B82F6', 'circle-opacity': 0.18 } });
-        map.addLayer({ id: 'b-dot',  type: 'circle', source: 'b', paint: { 'circle-radius': 6,  'circle-color': '#3B82F6', 'circle-stroke-color': '#0F0F0F', 'circle-stroke-width': 3 } });
-        readyRef.current = true;
-        paint(map, lng, lat);
-      });
-      return () => { map.remove(); readyRef.current = false; };
+      map.on('load', () => { readyRef.current = true; addMarkers(map); });
     }
+
+    return () => { mapRef.current?.remove(); mapRef.current = null; readyRef.current = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function paint(m: any, lo: number, la: number) {
-    if (!m || !readyRef.current) return;
-    m.getSource('b')?.setData({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lo, la] } }] });
-  }
+  // Cambio de tema: intercambia el basemap y vuelve a pintar el marcador (setStyle limpia capas).
+  useEffect(() => {
+    function onPrefs() {
+      const map = mapRef.current;
+      if (!map || !readyRef.current) return;
+      map.setStyle(makeMapStyle(currentTheme()));
+      map.once('styledata', () => addMarkers(map));
+    }
+    window.addEventListener('prefs-changed', onPrefs);
+    return () => window.removeEventListener('prefs-changed', onPrefs);
+  }, []);
 
   useEffect(() => {
+    coordsRef.current = [lng, lat];
     const map = mapRef.current;
-    if (!map) return;
-    paint(map, lng, lat);
+    if (!map || !readyRef.current) return;
+    paint(map);
     map.flyTo({ center: [lng, lat], zoom: 15.5, speed: 1.4, essential: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lng, lat]);
@@ -85,23 +110,32 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
   return <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />;
 }
 
+interface BranchFormData { nombre: string; ciudad: string; codigo: string; latitud: number | null; longitud: number | null }
+
 function BranchModal({ mode, data, onSave, onClose }: {
   mode: 'new' | 'edit';
-  data?: Partial<{ nombre: string; ciudad: string; codigo: string }>;
-  onSave: (d: { nombre: string; ciudad: string; codigo: string }) => void;
+  data?: Partial<SucursalDTO>;
+  onSave: (d: BranchFormData) => void;
   onClose: () => void;
 }) {
   const [nombre, setNombre] = useState(data?.nombre ?? '');
   const [ciudad, setCiudad] = useState(data?.ciudad ?? '');
   const [codigo, setCodigo] = useState(data?.codigo ?? '');
+  const [lat, setLat] = useState(data?.latitud != null ? String(data.latitud) : '');
+  const [lng, setLng] = useState(data?.longitud != null ? String(data.longitud) : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     if (!nombre || !ciudad) { setError('Nombre y ciudad son obligatorios.'); return; }
+    const latNum = lat.trim() === '' ? null : Number(lat);
+    const lngNum = lng.trim() === '' ? null : Number(lng);
+    if (latNum != null && (Number.isNaN(latNum) || latNum < -90 || latNum > 90)) { setError('La latitud debe estar entre -90 y 90.'); return; }
+    if (lngNum != null && (Number.isNaN(lngNum) || lngNum < -180 || lngNum > 180)) { setError('La longitud debe estar entre -180 y 180.'); return; }
+    if ((latNum == null) !== (lngNum == null)) { setError('Ingresa latitud y longitud, o deja ambas vacías.'); return; }
     setLoading(true);
     try {
-      await onSave({ nombre, ciudad, codigo });
+      await onSave({ nombre, ciudad, codigo, latitud: latNum, longitud: lngNum });
     } catch {
       setError('Ha ocurrido un error. Intente más tarde.');
     } finally {
@@ -121,6 +155,13 @@ function BranchModal({ mode, data, onSave, onClose }: {
           <div className="field"><label className="field-label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="SUC-01" /></div>
           <div className="field"><label className="field-label">Nombre *</label><input className="input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la sucursal" /></div>
           <div className="field"><label className="field-label">Ciudad *</label><input className="input" value={ciudad} onChange={e => setCiudad(e.target.value)} placeholder="Ciudad" /></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="field"><label className="field-label">Latitud</label><input className="input" value={lat} onChange={e => setLat(e.target.value)} placeholder="-33.4489" inputMode="decimal" /></div>
+            <div className="field"><label className="field-label">Longitud</label><input className="input" value={lng} onChange={e => setLng(e.target.value)} placeholder="-70.6693" inputMode="decimal" /></div>
+          </div>
+          <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: -4 }}>
+            Opcional — define la ubicación exacta en el mapa. Déjalas vacías para usar el centro por defecto.
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
           <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancelar</button>
@@ -133,11 +174,53 @@ function BranchModal({ mode, data, onSave, onClose }: {
   );
 }
 
+function ConfirmBranchModal({ branch, onClose, onConfirm }: {
+  branch: SucursalDTO;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const desactivar = branch.habilitada;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError(null);
+    try {
+      await onConfirm();
+      onClose();
+    } catch {
+      setError('Ha ocurrido un error. Intente más tarde.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card" style={{ width: 400, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
+        <h2 className="ds-h3" style={{ margin: '0 0 8px' }}>{desactivar ? 'Desactivar sucursal' : 'Activar sucursal'}</h2>
+        <p className="ds-sm" style={{ margin: '0 0 20px' }}>
+          ¿Seguro que deseas {desactivar ? 'desactivar' : 'activar'} la sucursal <b style={{ color: 'var(--text-primary)' }}>{branch.nombre}</b>?
+        </p>
+        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 14 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancelar</button>
+          <button className={desactivar ? 'btn btn-danger' : 'btn btn-primary'} onClick={handleConfirm} disabled={loading}>
+            {loading ? 'Confirmando…' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
 export function BranchesView() {
   const [branches, setBranches] = useState<SucursalDTO[]>([]);
   const [status, setStatus] = useState<'loading' | 'error' | 'ok'>('loading');
   const [sel, setSel] = useState(0);
   const [modal, setModal] = useState<{ mode: 'new' | 'edit'; data?: Partial<SucursalDTO> } | null>(null);
+  const [confirm, setConfirm] = useState<SucursalDTO | null>(null);
 
   const fetchBranches = useCallback(async () => {
     setStatus('loading');
@@ -153,11 +236,13 @@ export function BranchesView() {
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
   const b = branches[Math.min(sel, branches.length - 1)];
-  const coords = b ? (COORDS[b.nombre] ?? DEFAULT_CENTER) : DEFAULT_CENTER;
-  const lat = Array.isArray(coords) ? coords[1] : (coords as { lat: number; lng: number }).lat;
-  const lng = Array.isArray(coords) ? coords[0] : (coords as { lat: number; lng: number }).lng;
+  // Prioridad: coords guardadas en la sucursal → tabla estática por nombre → centro por defecto.
+  const hasCoords = b?.latitud != null && b?.longitud != null;
+  const fallback = b ? (COORDS[b.nombre] ?? null) : null;
+  const lat = hasCoords ? (b!.latitud as number) : (fallback ? fallback.lat : DEFAULT_CENTER[1]);
+  const lng = hasCoords ? (b!.longitud as number) : (fallback ? fallback.lng : DEFAULT_CENTER[0]);
 
-  async function handleSave(d: { nombre: string; ciudad: string; codigo: string }) {
+  async function handleSave(d: BranchFormData) {
     if (modal?.mode === 'new') {
       const created = await crearSucursal(d);
       setBranches(prev => [...prev, created]);
@@ -170,12 +255,8 @@ export function BranchesView() {
   }
 
   async function toggleEstado(branch: SucursalDTO) {
-    try {
-      const updated = await cambiarEstadoSucursal(branch.id, !branch.habilitada);
-      setBranches(prev => prev.map(x => x.id === updated.id ? updated : x));
-    } catch {
-      alert('No se pudo cambiar el estado de la sucursal.');
-    }
+    const updated = await cambiarEstadoSucursal(branch.id, !branch.habilitada);
+    setBranches(prev => prev.map(x => x.id === updated.id ? updated : x));
   }
 
   const ciudades = new Set(branches.map(x => x.ciudad)).size;
@@ -262,9 +343,9 @@ export function BranchesView() {
                   <Badge kind={b.habilitada ? 'success' : 'neutral'}>{b.habilitada ? 'Activa' : 'Inactiva'}</Badge>
                 </div>
                 <div style={{ height: 1, background: 'var(--bg-border)', margin: '14px 0' }} />
-                {!COORDS[b.nombre] && (
+                {!hasCoords && !COORDS[b.nombre] && (
                   <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginBottom: 10 }}>
-                    Coordenadas no disponibles — mostrando centro por defecto
+                    Coordenadas no disponibles — mostrando centro por defecto. Edita la sucursal para fijarlas.
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -273,7 +354,7 @@ export function BranchesView() {
                     <Icon name="pencil" size={14} />Editar
                   </button>
                   <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: b.habilitada ? 'var(--color-danger)' : 'var(--color-success)' }}
-                    onClick={() => toggleEstado(b)}>
+                    onClick={() => setConfirm(b)}>
                     <Icon name={b.habilitada ? 'toggle-left' : 'toggle-right'} size={14} />
                     {b.habilitada ? 'Desactivar' : 'Activar'}
                   </button>
@@ -290,6 +371,14 @@ export function BranchesView() {
           data={modal.data}
           onSave={handleSave}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmBranchModal
+          branch={confirm}
+          onConfirm={() => toggleEstado(confirm)}
+          onClose={() => setConfirm(null)}
         />
       )}
     </div>

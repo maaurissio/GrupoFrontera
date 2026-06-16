@@ -8,6 +8,7 @@ import { listarSucursales } from '../api/sucursales';
 import { obtenerKpis } from '../api/kpis';
 import { ApiError } from '../api/types';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
+import { ultimosMeses, type ChartSeries } from '../utils/periodo';
 
 function currentPeriodo(): string {
   const now = new Date();
@@ -116,6 +117,8 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
   const [, setKpiData] = useState<RespuestaKpis | null>(null);
   const [kpiStatus, setKpiStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
   const [kpiCards, setKpiCards] = useState<KpiCard[]>([]);
+  const [chartData, setChartData] = useState<ChartSeries | null>(null);
+  const [chartStatus, setChartStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
 
   useEffect(() => {
     const ac = new AbortController();
@@ -147,10 +150,35 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
     }
   }, []);
 
+  const fetchChart = useCallback(async (sid: number, per: string) => {
+    setChartStatus('loading');
+    const meses = ultimosMeses(per, 6);
+    try {
+      const results = await Promise.all(
+        meses.map(mo => obtenerKpis(sid, mo.periodo).catch(() => null)),
+      );
+      if (!results.some(Boolean)) {
+        setChartData(null);
+        setChartStatus('nodata');
+        return;
+      }
+      setChartData({
+        months: meses.map(m => m.corto),
+        fullLabels: meses.map(m => m.full),
+        ventas: results.map(r => (r ? Number(r.totalVentas) / 1_000_000 : 0)),
+        tx: results.map(r => (r ? Number(r.cantidadTransacciones) : 0)),
+      });
+      setChartStatus('idle');
+    } catch {
+      setChartStatus('error');
+    }
+  }, []);
+
   useEffect(() => {
     if (sucursalId == null || !periodo) return;
     fetchKpis(sucursalId, periodo);
-  }, [sucursalId, periodo, fetchKpis]);
+    fetchChart(sucursalId, periodo);
+  }, [sucursalId, periodo, fetchKpis, fetchChart]);
 
   const sucursalNombre = sucursales.find(s => s.id === sucursalId)?.nombre ?? '';
 
@@ -226,11 +254,30 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
       {/* chart + modules */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.55fr) minmax(0,1fr)', gap: 16 }}>
         <Panel title="Ventas en el tiempo" action={
-          <button className="btn btn-secondary btn-sm" style={{ height: 30, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="calendar" size={13} />Ene – Jun 2026<Icon name="chevron-down" size={13} style={{ color: 'var(--text-secondary)' }} />
-          </button>
+          chartData && (
+            <span className="btn btn-secondary btn-sm" style={{ height: 30, display: 'flex', alignItems: 'center', gap: 6, cursor: 'default' }}>
+              <Icon name="calendar" size={13} />{chartData.fullLabels[0]} – {chartData.fullLabels[chartData.fullLabels.length - 1]}
+            </span>
+          )
         }>
-          <LineChart data={DATA.chart} height={220} />
+          {chartStatus === 'loading' ? (
+            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="loader" size={20} style={{ color: 'var(--text-disabled)' }} />
+            </div>
+          ) : chartStatus === 'error' ? (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="alert-circle" size={22} style={{ color: 'var(--color-danger)' }} />
+              <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>Error al cargar la serie</div>
+              <button className="btn btn-ghost btn-sm" onClick={() => sucursalId && fetchChart(sucursalId, periodo)}>Reintentar</button>
+            </div>
+          ) : chartData ? (
+            <LineChart data={chartData} height={220} />
+          ) : (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="inbox" size={24} style={{ color: 'var(--text-disabled)' }} />
+              <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>No hay ventas registradas en el período</div>
+            </div>
+          )}
         </Panel>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start' }}>

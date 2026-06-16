@@ -9,6 +9,8 @@ public class SucursalDTO {
     public String nombre;
     public String ciudad;
     public Boolean habilitada;
+    public Double latitud;
+    public Double longitud;
     public LocalDateTime createdAt;
     public LocalDateTime updatedAt;
 }

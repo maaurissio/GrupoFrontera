@@ -44,8 +44,7 @@ export async function apiFetch<T = unknown>(
     };
     const retry = await fetch(`${BFF_URL}${path}`, { ...init, signal, headers: retryHeaders });
     if (!retry.ok) throw new AuthError('Sesión expirada');
-    if (retry.status === 204) return undefined as T;
-    return retry.json();
+    return parseBody<T>(retry);
   }
 
   if (!res.ok) {
@@ -54,8 +53,16 @@ export async function apiFetch<T = unknown>(
     throw new ApiError(res.status, msg);
   }
 
+  return parseBody<T>(res);
+}
+
+// Tolera respuestas sin cuerpo (204, o 200 con body vacío como activar/desactivar):
+// devolver res.json() sobre un cuerpo vacío lanza SyntaxError.
+async function parseBody<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
-  return res.json();
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export async function apiFetchBlob(

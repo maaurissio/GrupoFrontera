@@ -24,8 +24,9 @@ export function actualizarSucursal(id: number, data: SucursalCreatePayload): Pro
 }
 
 export function cambiarEstadoSucursal(id: number, habilitada: boolean): Promise<SucursalDTO> {
+  // El backend (BFF y ms-datos) espera el campo "activo", no "habilitada".
   return apiFetch<SucursalDTO>(`/api/bff/sucursales/${id}/estado`, {
     method: 'PUT',
-    body: JSON.stringify({ habilitada }),
+    body: JSON.stringify({ activo: habilitada }),
   });
 }

@@ -2,7 +2,8 @@ import { apiFetch } from './client';
 import type { UsuarioDTO, UsuarioCreatePayload } from './types';
 
 export function listarUsuarios(signal?: AbortSignal): Promise<UsuarioDTO[]> {
-  return apiFetch<UsuarioDTO[]>('/api/bff/usuarios', {}, signal);
+  // /todos incluye inactivos para poder reactivarlos; el filtro "Solo activos" es del lado del cliente.
+  return apiFetch<UsuarioDTO[]>('/api/bff/usuarios/todos', {}, signal);
 }
 
 export function obtenerUsuario(id: string, signal?: AbortSignal): Promise<UsuarioDTO> {

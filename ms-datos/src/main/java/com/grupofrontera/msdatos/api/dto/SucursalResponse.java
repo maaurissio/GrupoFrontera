@@ -10,6 +10,8 @@ public class SucursalResponse {
     public String nombre;
     public String ciudad;
     public Boolean habilitada;
+    public Double latitud;
+    public Double longitud;
     public LocalDateTime createdAt;
     public LocalDateTime updatedAt;
 
@@ -20,6 +22,8 @@ public class SucursalResponse {
         r.nombre = sucursal.nombre;
         r.ciudad = sucursal.ciudad;
         r.habilitada = sucursal.habilitada;
+        r.latitud = sucursal.latitud;
+        r.longitud = sucursal.longitud;
         r.createdAt = sucursal.createdAt;
         r.updatedAt = sucursal.updatedAt;
         return r;

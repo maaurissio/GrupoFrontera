@@ -14,6 +14,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,6 +39,12 @@ public class UsuarioResource {
     }
 
     @GET
+    @Path("/todos")
+    public List<Object> listarTodos() {
+        return usersClient.listarTodosUsuarios();
+    }
+
+    @GET
     @Path("/{id}")
     public Object obtener(@PathParam("id") UUID id) {
         return usersClient.obtenerUsuario(id);
@@ -45,33 +52,44 @@ public class UsuarioResource {
 
     @POST
     public Response crear(@Valid UsuarioCreateRequest request) {
-        var usuarioPayload = Map.of(
-            "rut", request.rut,
-            "dv", request.dv != null ? request.dv : "",
-            "nombre", request.nombre,
-            "apellido", request.apellido,
-            "email", request.email,
-            "telefono", request.telefono != null ? request.telefono : "",
-            "fechaNacimiento", request.fechaNacimiento != null ? request.fechaNacimiento.toString() : null
-        );
-
-        Response usersResponse = usersClient.crearUsuario(usuarioPayload);
-        if (usersResponse.getStatus() != 201) {
-            return usersResponse;
+        // HashMap (no Map.of) porque permite valores null: fechaNacimiento es opcional.
+        Map<String, Object> usuarioPayload = new HashMap<>();
+        usuarioPayload.put("rut", request.rut);
+        usuarioPayload.put("dv", request.dv != null ? request.dv : "");
+        usuarioPayload.put("nombre", request.nombre);
+        usuarioPayload.put("apellido", request.apellido);
+        usuarioPayload.put("email", request.email);
+        usuarioPayload.put("telefono", request.telefono != null ? request.telefono : "");
+        if (request.fechaNacimiento != null) {
+            usuarioPayload.put("fechaNacimiento", request.fechaNacimiento.toString());
         }
 
-        Object usuarioCreado = usersResponse.getEntity();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> usuarioMap = (Map<String, Object>) usuarioCreado;
-        UUID usuarioId = UUID.fromString(usuarioMap.get("id").toString());
+        try (Response usersResponse = usersClient.crearUsuario(usuarioPayload)) {
+            if (usersResponse.getStatus() != 201) {
+                // Propaga el error de ms-users (p. ej. 409 RUT/email duplicado) tal cual.
+                String body = usersResponse.hasEntity() ? usersResponse.readEntity(String.class) : "";
+                return Response.status(usersResponse.getStatus()).entity(body).build();
+            }
 
-        var authPayload = Map.of(
-            "usuarioId", usuarioId.toString(),
-            "email", request.email,
-            "password", request.password
-        );
+            // En un cliente JAX-RS la entidad se lee con readEntity, no con getEntity().
+            @SuppressWarnings("unchecked")
+            Map<String, Object> usuarioMap = usersResponse.readEntity(Map.class);
+            UUID usuarioId = UUID.fromString(usuarioMap.get("id").toString());
 
-        return authClient.register(authPayload);
+            Map<String, Object> authPayload = new HashMap<>();
+            authPayload.put("usuarioId", usuarioId.toString());
+            authPayload.put("email", request.email);
+            authPayload.put("password", request.password);
+
+            try (Response authResponse = authClient.register(authPayload)) {
+                if (authResponse.getStatus() >= 300) {
+                    String body = authResponse.hasEntity() ? authResponse.readEntity(String.class) : "";
+                    return Response.status(authResponse.getStatus()).entity(body).build();
+                }
+                // Devuelve el usuario creado (201) al frontend.
+                return Response.status(Response.Status.CREATED).entity(usuarioMap).build();
+            }
+        }
     }
 
     @PUT

@@ -34,6 +34,12 @@ public class Sucursal extends PanacheEntityBase {
     @Column(name = "habilitada", nullable = false)
     public Boolean habilitada = true;
 
+    @Column(name = "latitud")
+    public Double latitud;
+
+    @Column(name = "longitud")
+    public Double longitud;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     public LocalDateTime createdAt;
 

@@ -17,6 +17,8 @@ export interface SucursalDTO {
   nombre: string;
   ciudad: string;
   habilitada: boolean;
+  latitud?: number | null;
+  longitud?: number | null;
 }
 
 export interface RespuestaKpis {
@@ -76,6 +78,8 @@ export interface SucursalCreatePayload {
   codigo: string;
   nombre: string;
   ciudad: string;
+  latitud?: number | null;
+  longitud?: number | null;
 }
 
 export class ApiError extends Error {
