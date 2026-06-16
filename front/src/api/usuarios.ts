@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { UsuarioDTO, UsuarioCreatePayload } from './types';
+import type { UsuarioDTO, UsuarioCreatePayload, AsignacionSucursalDTO } from './types';
 
 export function listarUsuarios(signal?: AbortSignal): Promise<UsuarioDTO[]> {
   // /todos incluye inactivos para poder reactivarlos; el filtro "Solo activos" es del lado del cliente.
@@ -23,4 +23,21 @@ export function desactivarUsuario(id: string): Promise<void> {
 
 export function activarUsuario(id: string): Promise<void> {
   return apiFetch(`/api/bff/usuarios/${id}/activar`, { method: 'PUT' });
+}
+
+// --- Asignación de sucursales a un usuario ---
+
+export function listarSucursalesUsuario(usuarioId: string, signal?: AbortSignal): Promise<AsignacionSucursalDTO[]> {
+  return apiFetch<AsignacionSucursalDTO[]>(`/api/bff/usuarios/${usuarioId}/sucursales`, {}, signal);
+}
+
+export function asignarSucursal(usuarioId: string, sucursalId: number): Promise<unknown> {
+  return apiFetch(`/api/bff/usuarios/${usuarioId}/sucursales`, {
+    method: 'POST',
+    body: JSON.stringify({ sucursalId }),
+  });
+}
+
+export function desasignarSucursal(asignacionId: string): Promise<void> {
+  return apiFetch(`/api/bff/usuarios/asignaciones-sucursal/${asignacionId}`, { method: 'DELETE' });
 }

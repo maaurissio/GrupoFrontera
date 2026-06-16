@@ -22,6 +22,16 @@ export interface SucursalDTO {
   longitud?: number | null;
 }
 
+// Asignación usuario↔sucursal (ms-users); el BFF agrega `sucursalNombre`.
+export interface AsignacionSucursalDTO {
+  id: string;            // UUID de la asignación (para desasignar)
+  usuarioId: string;
+  nombreUsuario: string;
+  sucursalId: number;    // id de la sucursal en ms-datos
+  sucursalNombre?: string;
+  asignadoEn: string;
+}
+
 export interface RegionDTO {
   id: number;
   nombre: string;

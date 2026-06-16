@@ -1,5 +1,6 @@
 package com.grupofrontera.msreportes.servicio;
 
+import com.grupofrontera.msreportes.cliente.ClienteDatos;
 import com.grupofrontera.msreportes.cliente.ClienteKpis;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
 import com.grupofrontera.msreportes.dto.RespuestaKpisDto;
@@ -16,6 +17,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class ReportesServicio {
@@ -26,6 +29,25 @@ public class ReportesServicio {
     @Inject
     @RestClient
     ClienteKpis clienteKpis;
+
+    @Inject
+    @RestClient
+    ClienteDatos clienteDatos;
+
+    /**
+     * Mapa sucursalId → nombre. Si ms-datos no responde, devuelve mapa vacío
+     * (los reportes caen a "Sucursal {id}" en vez de fallar).
+     */
+    public Map<Long, String> obtenerNombresSucursales() {
+        try {
+            return clienteDatos.listarSucursales().stream()
+                    .filter(s -> s.id != null && s.nombre != null)
+                    .collect(Collectors.toMap(s -> s.id, s -> s.nombre, (a, b) -> a));
+        } catch (Exception e) {
+            LOG.warnf("No se pudieron obtener nombres de sucursal desde ms-datos: %s", e.getMessage());
+            return Map.of();
+        }
+    }
 
     public ReporteDashboard obtenerDashboard(Long sucursalId, String periodo) {
         LOG.infof("Consultando dashboard: sucursalId=%d, periodo=%s", sucursalId, periodo);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Panel } from '../components/Primitives';
 import { listarDatos, reprocesarDato, logDato } from '../api/datos';
@@ -14,10 +14,49 @@ const ESTADO_KIND: Record<string, string> = {
 };
 
 const ESTADOS = ['RECIBIDO', 'VALIDADO', 'PROCESADO', 'ERROR'];
+const TIPOS = ['VENTA', 'INVENTARIO', 'DEVOLUCCION', 'TRANSFERENCIA', 'AJUSTE_INVENTARIO'];
 
 function formatDate(dt: string): string {
   try { return new Date(dt).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }); }
   catch { return dt; }
+}
+
+function ultimoDiaDelMes(mes: string): string {
+  // mes = "YYYY-MM" → "YYYY-MM-DD" del último día
+  const [y, m] = mes.split('-').map(Number);
+  const dia = new Date(y, m, 0).getDate();
+  return `${mes}-${String(dia).padStart(2, '0')}`;
+}
+
+function formatPeriodo(p: string): string {
+  try {
+    const d = new Date(p + 'T00:00:00');
+    return d.toLocaleDateString('es-CL', { year: 'numeric', month: 'short' });
+  } catch { return p; }
+}
+
+function parseValor(tipoDato: string, valorJson: string | null | undefined): string {
+  if (!valorJson) return '—';
+  try {
+    const v = JSON.parse(valorJson);
+    const clp = (n: number) => '$' + Math.round(n).toLocaleString('es-CL');
+    switch (tipoDato) {
+      case 'VENTA':
+        return `${v.categoria ?? ''} · ${clp(v.total ?? 0)} · ${v.transacciones ?? 0} tx · ${v.canal ?? ''}`;
+      case 'INVENTARIO':
+        return `${v.sku ?? ''} · ${v.descripcion ?? ''} · Stock: ${v.stock_actual ?? 0} / mín: ${v.stock_minimo ?? 0}`;
+      case 'DEVOLUCCION':
+        return `${v.motivo ?? ''} · ${clp(v.monto ?? 0)} · ${v.unidades ?? 0} und`;
+      case 'TRANSFERENCIA':
+        return `S${v.sucursal_origen ?? '?'} → S${v.sucursal_destino ?? '?'} · ${v.sku ?? ''} · ${v.unidades ?? 0} uds`;
+      case 'AJUSTE_INVENTARIO':
+        return `${v.tipo ?? ''} · ${v.sku ?? ''} · ${v.cantidad ?? 0} uds · ${v.motivo ?? ''}`;
+      default:
+        return valorJson.length > 80 ? valorJson.slice(0, 80) + '…' : valorJson;
+    }
+  } catch {
+    return valorJson.length > 80 ? valorJson.slice(0, 80) + '…' : valorJson;
+  }
 }
 
 function LogTimeline({ id, onClose }: { id: number; onClose: () => void }) {
@@ -63,6 +102,28 @@ function LogTimeline({ id, onClose }: { id: number; onClose: () => void }) {
   );
 }
 
+function periodoActual(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function restarMeses(ym: string, n: number): string {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 - n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function mesLegible(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('es-CL', { month: 'short', year: 'numeric' });
+}
+
+const RANGOS_RAPIDOS = [
+  { label: 'Últimos 3 meses', meses: 3 },
+  { label: 'Últimos 6 meses', meses: 6 },
+  { label: 'Últimos 12 meses', meses: 12 },
+];
+
 export function DatosView() {
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
   const [datos, setDatos] = useState<DatoConsolidadoDTO[]>([]);
@@ -99,8 +160,25 @@ export function DatosView() {
     const f: DatosFiltros = {};
     if (sucursalId !== '') f.sucursalId = sucursalId as number;
     if (tipoDato) f.tipoDato = tipoDato;
-    if (periodoDesde) f.periodoDesde = periodoDesde;
-    if (periodoHasta) f.periodoHasta = periodoHasta;
+    // Los datos son mensuales (día 1). El input "month" entrega YYYY-MM:
+    // desde = primer día del mes; hasta = último día del mes (inclusivo).
+    if (periodoDesde) f.periodoDesde = `${periodoDesde}-01`;
+    if (periodoHasta) f.periodoHasta = ultimoDiaDelMes(periodoHasta);
+    if (estado) f.estado = estado;
+    setFiltros(f);
+  }
+
+  // Atajo: fija el rango a los últimos N meses y aplica de inmediato.
+  function aplicarRango(nMeses: number) {
+    const hasta = periodoActual();
+    const desde = restarMeses(hasta, nMeses - 1);
+    setPeriodoDesde(desde);
+    setPeriodoHasta(hasta);
+    const f: DatosFiltros = {};
+    if (sucursalId !== '') f.sucursalId = sucursalId as number;
+    if (tipoDato) f.tipoDato = tipoDato;
+    f.periodoDesde = `${desde}-01`;
+    f.periodoHasta = ultimoDiaDelMes(hasta);
     if (estado) f.estado = estado;
     setFiltros(f);
   }
@@ -133,17 +211,40 @@ export function DatosView() {
             {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
         </div>
-        <div className="field" style={{ minWidth: 140 }}>
+        <div className="field" style={{ minWidth: 160 }}>
           <label className="field-label">Tipo de dato</label>
-          <input className="input" value={tipoDato} onChange={e => setTipoDato(e.target.value)} placeholder="VENTAS…" style={{ height: 34 }} />
+          <select className="input select" value={tipoDato} onChange={e => setTipoDato(e.target.value)} style={{ height: 34 }}>
+            <option value="">Todos</option>
+            {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
         </div>
-        <div className="field" style={{ minWidth: 140 }}>
-          <label className="field-label">Período desde</label>
-          <input className="input" type="date" value={periodoDesde} onChange={e => setPeriodoDesde(e.target.value)} style={{ height: 34 }} />
-        </div>
-        <div className="field" style={{ minWidth: 140 }}>
-          <label className="field-label">Período hasta</label>
-          <input className="input" type="date" value={periodoHasta} onChange={e => setPeriodoHasta(e.target.value)} style={{ height: 34 }} />
+        <div className="field" style={{ minWidth: 320 }}>
+          <label className="field-label">Período</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ position: 'relative' }}>
+              <Icon name="calendar" size={13} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+              <input className="input" type="month" value={periodoDesde} max={periodoHasta || undefined}
+                onChange={e => setPeriodoDesde(e.target.value)} style={{ height: 34, paddingLeft: 28, width: 150 }} title="Mes inicial" />
+            </div>
+            <Icon name="arrow-right" size={14} style={{ color: 'var(--text-disabled)', flex: 'none' }} />
+            <div style={{ position: 'relative' }}>
+              <Icon name="calendar" size={13} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+              <input className="input" type="month" value={periodoHasta} min={periodoDesde || undefined}
+                onChange={e => setPeriodoHasta(e.target.value)} style={{ height: 34, paddingLeft: 28, width: 150 }} title="Mes final" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {RANGOS_RAPIDOS.map(r => (
+              <button key={r.meses} className="btn btn-ghost btn-sm" style={{ height: 24, fontSize: 11, padding: '0 8px' }} onClick={() => aplicarRango(r.meses)}>
+                {r.label}
+              </button>
+            ))}
+            {(periodoDesde || periodoHasta) && (
+              <span className="ds-label" style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 2 }}>
+                {periodoDesde ? mesLegible(periodoDesde) : '…'} → {periodoHasta ? mesLegible(periodoHasta) : '…'}
+              </span>
+            )}
+          </div>
         </div>
         <div className="field" style={{ minWidth: 140 }}>
           <label className="field-label">Estado</label>
@@ -192,8 +293,8 @@ export function DatosView() {
               </thead>
               <tbody>
                 {datos.map(d => (
-                  <>
-                    <tr key={d.id} style={{ cursor: 'pointer' }}>
+                  <Fragment key={d.id}>
+                    <tr style={{ cursor: 'pointer' }}>
                       <td>
                         <button className="btn btn-ghost btn-icon btn-sm" title="Ver trazabilidad" onClick={() => setExpanded(expanded === d.id ? null : d.id)}>
                           <Icon name={expanded === d.id ? 'chevron-up' : 'chevron-down'} size={14} />
@@ -202,8 +303,8 @@ export function DatosView() {
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{d.fuenteNombre}</td>
                       <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{d.sucursalNombre}</td>
                       <td className="ds-mono" style={{ fontSize: 12 }}>{d.tipoDato}</td>
-                      <td className="ds-mono" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{d.periodo}</td>
-                      <td className="ds-mono" style={{ color: 'var(--text-primary)' }}>{d.valor}</td>
+                      <td className="ds-mono" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{formatPeriodo(d.periodo)}</td>
+                      <td style={{ color: 'var(--text-primary)', fontSize: 12, maxWidth: 360, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.valor ?? ''}>{parseValor(d.tipoDato, d.valor)}</td>
                       <td><Badge kind={ESTADO_KIND[d.estado] || 'neutral'}>{d.estado}</Badge></td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{formatDate(d.createdAt)}</td>
                       <td>
@@ -220,13 +321,13 @@ export function DatosView() {
                       </td>
                     </tr>
                     {expanded === d.id && (
-                      <tr key={`log-${d.id}`}>
+                      <tr>
                         <td colSpan={9} style={{ padding: 0 }}>
                           <LogTimeline id={d.id} onClose={() => setExpanded(null)} />
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

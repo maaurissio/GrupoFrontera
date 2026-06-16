@@ -54,10 +54,14 @@ public interface UsersClient {
     @POST @Path("/usuarios/{usuarioId}/roles")
     Response asignarRol(@PathParam("usuarioId") UUID usuarioId, Object request);
 
-    // Usuario-Sucursal (asignacion; la sucursal vive en ms-datos)
-    @GET @Path("/usuarios/{usuarioId}/sucursales")
+    // Usuario-Sucursal (asignacion; la sucursal vive en ms-datos).
+    // ms-users expone estos endpoints en /usuario-sucursales (NO en /usuarios/{id}/sucursales).
+    @GET @Path("/usuario-sucursales/usuario/{usuarioId}")
     List<Object> listarSucursalesPorUsuario(@PathParam("usuarioId") UUID usuarioId);
 
-    @POST @Path("/usuarios/{usuarioId}/sucursales")
-    Response asignarSucursal(@PathParam("usuarioId") UUID usuarioId, Object request);
+    @POST @Path("/usuario-sucursales")
+    Response asignarSucursal(Object request);
+
+    @PUT @Path("/usuario-sucursales/{asignacionId}/desactivar")
+    Response desasignarSucursal(@PathParam("asignacionId") UUID asignacionId);
 }

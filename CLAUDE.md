@@ -8,14 +8,14 @@ Management-monitoring platform for a multi-branch retail company (Grupo Cordille
 
 ### Monorepo layout
 
-Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`, `Dockerfile`). There is **no root aggregator POM** — build and run each service from its own directory. Only ms-auth and ms-users have `docker-compose.yml`; ms-datos and ms-kpis use standalone Docker containers (see port table below).
+Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`, `Dockerfile`). There is **no root aggregator POM** — build and run each service from its own directory. **Hay un `docker-compose.yml` global en la raíz** que levanta TODO el stack (infra + microservicios + front) en contenedores; ese es el modo de ejecución actual (ver "Cómo levantar todo el stack").
 
 | Directory     | Role                         | Status                                                  |
 |---------------|------------------------------|---------------------------------------------------------|
 | `ms-users`    | User/role/branch domain      | **Fully implemented** — the reference for all patterns  |
 | `ms-auth`     | Authentication & JWT         | **Fully implemented** — JWT HS384, BCrypt, refresh tokens |
-| `ms-datos`    | Data ingestion               | Scaffold — implemented, requires manual DB container    |
-| `ms-kpis`     | KPI computation              | Scaffold — implemented, requires RabbitMQ + seed data   |
+| `ms-datos`    | Data ingestion               | **Fully implemented** — Flyway, catálogo geográfico, 4 sucursales + 5000 datos semilla |
+| `ms-kpis`     | KPI computation              | **Fully implemented** — Flyway, consume RabbitMQ, 96 KPIs semilla (4 suc × 12 meses) |
 | `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI) |
 | `bff`         | Backend-for-frontend         | **Fully implemented** — integra todos los microservicios |
 | `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 8 vistas      |
@@ -28,20 +28,27 @@ Java package convention: `com.grupofrontera.ms<name>` (e.g. `com.grupofrontera.m
 
 Esta máquina tiene servicios Windows que ocupan puertos por defecto. Los puertos fueron reasignados:
 
-| Servicio    | Puerto HTTP | Puerto BD (host) | BD name        |
-|-------------|-------------|------------------|----------------|
-| `ms-auth`   | **8088**    | 5435             | db_auth        |
-| `ms-users`  | **8085** ⚠️ | 5434             | db_users       |
-| `ms-datos`  | **8089** ⚠️ | **5437** ⚠️      | grupofrontera  |
-| `ms-kpis`   | **8086**    | 5438             | kpis_db        |
-| `ms-reportes` | **8087**  | —                | —              |
-| `bff`       | **8090**    | —                | —              |
-| `front`     | **5173**    | —                | —              |
+| Servicio    | Puerto HTTP | Puerto BD (host) | BD name (dev local) | BD name (docker-compose) |
+|-------------|-------------|------------------|---------------------|--------------------------|
+| `ms-auth`   | **8088**    | 5435             | db_auth             | auth_db                  |
+| `ms-users`  | **8085** ⚠️ | 5434             | db_users            | users_db                 |
+| `ms-datos`  | **8089** ⚠️ | **5437** ⚠️      | grupofrontera       | datos_db                 |
+| `ms-kpis`   | **8086**    | 5438             | kpis_db             | kpis_db                  |
+| `ms-reportes` | **8087**  | —                | —                   | —                        |
+| `bff`       | **8090**    | —                | —                   | —                        |
+| `front`     | **5173**    | —                | —                   | —                        |
+
+> ⚠️ **El nombre de la BD difiere según el modo de ejecución.** El `application.properties` de cada
+> servicio (modo dev local con `mvnw`) usa los nombres de la columna "dev local". El `docker-compose.yml`
+> global **sobrescribe la URL JDBC con variables de entorno** (`QUARKUS_DATASOURCE_JDBC_URL`) apuntando a
+> los nombres de la columna "docker-compose". Para inspeccionar la BD con `psql`, usa el nombre correcto
+> según cómo esté corriendo: actualmente corre vía docker-compose, así que la BD de datos es `datos_db`
+> (no `grupofrontera`) y los contenedores se llaman `gf_datos_db`, `gf_kpis_db`, etc.
 
 > **¿Por qué los puertos no-estándar?**
 > - Puerto 8080: ocupado por **Jenkins** (`java`, PID fijo)
 > - Puerto 8082: ocupado por **SSRS** (SQL Server Reporting Services, `RSHostingService`, HTTP.sys)
-> - Puerto 5432: conflicto entre **PostgreSQL local** y Docker — pg-datos usa 5437
+> - Puerto 5432: conflicto entre **PostgreSQL local** y Docker — datos-db usa 5437
 
 Los cambios ya están aplicados en los `application.properties` de cada servicio. No revertirlos.
 
@@ -66,27 +73,61 @@ cd ms-datos
 ./mvnw quarkus:dev -Dquarkus.live-reload.port=8193
 ```
 
-### Cómo levantar todo el stack (orden correcto)
+### Cómo levantar todo el stack
+
+Hay **dos modos**. El modo actual es **docker-compose** (todo en contenedores).
+
+#### Modo A — docker-compose (recomendado, todo en contenedores)
+
+No necesitas Maven ni Node instalados; cada servicio se compila dentro de Docker (multi-stage).
 
 ```powershell
-# 1. Contenedores Docker (si no están corriendo)
-docker start pg-auth pg-users pg-datos pg-kpis rabbitmq
-# Si es primera vez:
-docker run -d --name pg-auth  -e POSTGRES_USER=usuario_cordillera -e POSTGRES_PASSWORD=cordillera_pass -e POSTGRES_DB=db_auth    -p 5435:5432 postgres:16
-docker run -d --name pg-users -e POSTGRES_USER=usuario_cordillera -e POSTGRES_PASSWORD=cordillera_pass -e POSTGRES_DB=db_users   -p 5434:5432 postgres:16
-docker run -d --name pg-datos -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=grupofrontera              -p 5437:5432 postgres:16
-docker run -d --name pg-kpis  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=kpis_db                   -p 5438:5432 postgres:16
-docker run -d --name rabbitmq -e RABBITMQ_DEFAULT_USER=guest -e RABBITMQ_DEFAULT_PASS=guest -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+docker compose up -d --build      # build + run de todo el stack
+docker compose logs -f            # ver logs
+docker compose down               # apagar (conserva datos en volúmenes)
+docker compose down -v            # apagar + BORRAR datos (reset total)
+
+# Reconstruir solo algunos servicios tras un cambio de código:
+docker compose build ms-datos bff front
+docker compose up -d ms-datos bff front
+```
+
+Contenedores: `gf_ms_auth`, `gf_ms_users`, `gf_ms_datos`, `gf_ms_kpis`, `gf_ms_reportes`, `gf_bff`,
+`gf_front`, más las BDs `gf_auth_db`, `gf_users_db`, `gf_datos_db`, `gf_kpis_db` y `gf_rabbitmq`.
+Todas las BDs usan `postgres`/`postgres`. Inspeccionar una BD:
+`docker exec gf_datos_db psql -U postgres -d datos_db -c "SELECT ..."`.
+
+> **Migraciones Flyway al arrancar**: ms-datos y ms-kpis aplican sus migraciones automáticamente
+> (`migrate-at-start=true`). Las semillas son parte de las migraciones, así que **ambos servicios quedan
+> poblados solos** con una BD nueva — sin pasos manuales. Ver "Database notes" para el detalle de los seeds.
+
+#### Modo B — dev local con `mvnw` (live reload por servicio)
+
+Levanta solo la infra en Docker y corre cada microservicio con `mvnw quarkus:dev`:
+
+```powershell
+# 1. Solo infraestructura
+docker compose up -d auth-db users-db datos-db kpis-db rabbitmq
 
 # 2–6. Cada servicio en su propia terminal PowerShell
 cd ms-auth   && .\mvnw.cmd quarkus:dev   # terminal 1
 cd ms-users  && .\mvnw.cmd quarkus:dev   # terminal 2
-cd ms-datos  && .\mvnw.cmd quarkus:dev -Dquarkus.live-reload.port=8193  # terminal 3
+cd ms-datos  && .\mvnw.cmd quarkus:dev -Dquarkus.live-reload.port=8193  # terminal 3 (evita choque con Jenkins)
 cd ms-kpis   && .\mvnw.cmd quarkus:dev   # terminal 4
 cd bff       && .\mvnw.cmd quarkus:dev   # terminal 5
 cd front     && npm run dev              # terminal 6
+```
 
-# 7. Registrar credenciales en ms-auth (solo si ms-auth se reinició — su import.sql está vacío)
+> ⚠️ En modo B los nombres de BD del `application.properties` (`db_auth`, `db_users`, `grupofrontera`)
+> NO coinciden con los que crea docker-compose (`auth_db`, `users_db`, `datos_db`). Si levantas la infra
+> con docker-compose y los ms con `mvnw`, ms-datos buscará `grupofrontera` y fallará: o creas esa BD a mano,
+> o defines la env var `DB_URL` apuntando a `datos_db`.
+
+#### Credenciales de ms-auth (ambos modos)
+
+ms-auth tiene el `import.sql` **vacío**: las credenciales se registran tras cada arranque con BD nueva.
+
+```powershell
 curl -X POST http://localhost:8088/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"d1111111-1111-1111-1111-111111111111\",\"email\":\"admin@cordillera.cl\",\"password\":\"Admin1234!\"}"
 curl -X POST http://localhost:8088/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"e2222222-2222-2222-2222-222222222222\",\"email\":\"soporte@cordillera.cl\",\"password\":\"Soporte1234!\"}"
 curl -X POST http://localhost:8088/auth/register -H "Content-Type: application/json" -d "{\"usuarioId\":\"f3333333-3333-3333-3333-333333333333\",\"email\":\"gerente@cordillera.cl\",\"password\":\"Gerente1234!\"}"
@@ -119,8 +160,32 @@ Conventions enforced across the codebase (mirror these when adding code):
 ## Database notes
 
 - ms-auth y ms-users usan `drop-and-create` + `import.sql` — el esquema **se destruye y recrea en cada arranque**. Solo para dev; cambiar a `update` antes de producción.
-- ms-datos usa Flyway (`migrate-at-start=true`, `generation=none`). ms-kpis también usa Flyway. **Para cambiar el esquema de ms-datos hay que añadir una nueva migración `V#__*.sql` en `db/migration/` — no editar las existentes** (`V2__sucursal_coordenadas.sql` agregó `latitud`/`longitud` a `sucursal`).
+- ms-datos usa Flyway (`migrate-at-start=true`, `generation=none`). ms-kpis también usa Flyway. **Para cambiar el esquema o los datos de ms-datos/ms-kpis hay que añadir una nueva migración `V#__*.sql` en `db/migration/` — NUNCA editar una migración ya aplicada** (Flyway valida el checksum y el arranque falla). Como las migraciones ya corrieron en los volúmenes Docker existentes, cualquier corrección a datos sembrados debe ir en una migración nueva con `UPDATE`/`TRUNCATE`+`INSERT`, no editando la vieja.
 - Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Tests use `quarkus-junit5` + `rest-assured`.
+
+#### Migraciones y datos semilla de ms-datos (`db/migration/`)
+
+| Versión | Contenido |
+|---------|-----------|
+| `V1__init.sql` | tablas `fuente`, `sucursal`, `dato_consolidado`, `log_trazabilidad` + índices |
+| `V2__sucursal_coordenadas.sql` | agrega `latitud`/`longitud` a `sucursal` |
+| `V3__region_ciudad_y_seed.sql` | catálogo `region`/`ciudad` (16 regiones, 57 ciudades) + 3 sucursales (ids 1–3) |
+| `V4__seed_datos_retail.sql` | 5 fuentes + 1000 datos consolidados (retail hogar/tecnología) + logs — **reemplazado por V6** |
+| `V5__naturalizar_montos.sql` | reescribe los montos del JSON de V4 para que no terminen en `000` |
+| `V6__rehacer_sucursales_y_5000_datos.sql` | **reemplaza las 3 sucursales por 4** (ids 1–4: Don Raucho/Angol, Jurel San Jose/Coronel, Hogar Central/Santiago, TecnoSur/Puerto Montt) y **regenera 5000 datos** con valores naturales (no terminados en 000) |
+
+- **V4** genera 1000 filas con aritmética determinista, repartidas en 5 `tipo_dato`: `VENTA` (30%), `INVENTARIO` (30%), `AJUSTE_INVENTARIO` (20%), `DEVOLUCCION` (10%), `TRANSFERENCIA` (10%); 12 meses (jul-2025 → jun-2026); estados PROCESADO/VALIDADO/RECIBIDO/ERROR. El campo `valor` es **JSON** (texto) con forma distinta por tipo — el front lo parsea en `DatosView` (`parseValor`).
+
+#### Migraciones y datos semilla de ms-kpis (`db/migration/`)
+
+| Versión | Contenido |
+|---------|-----------|
+| `V1__crear_tablas_kpis.sql` | tablas `indicador_ventas`, `indicador_inventario` |
+| `V2__seed_kpis_retail.sql` | 36 + 36 indicadores (3 sucursales × 12 meses) con patrón estacional |
+| `V3__actualizar_valores_kpis.sql` | `TRUNCATE` + re-`INSERT` con montos naturales (no terminados en 000) |
+| `V4__kpis_4_sucursales.sql` | **regenera para las 4 sucursales** (ids 1–4): 48 + 48 indicadores generados por SQL (factor estacional + jitter natural) |
+
+- Los KPIs también se recalculan en vivo desde eventos RabbitMQ (`venta.realizada`, `actualizacion.stock`); el seed solo garantiza que el dashboard tenga datos desde el primer arranque.
 
 ### Credenciales semilla (ms-users import.sql)
 
@@ -185,6 +250,9 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | POST   | /api/bff/usuarios                  | ms-users + ms-auth |
 | PUT    | /api/bff/usuarios/{id}/activar     | ms-users         |
 | PUT    | /api/bff/usuarios/{id}/desactivar  | ms-users         |
+| GET    | /api/bff/usuarios/{id}/sucursales  | ms-users (`/usuario-sucursales`, enriquecido) |
+| POST   | /api/bff/usuarios/{id}/sucursales  | ms-users (asigna sucursal) |
+| DELETE | /api/bff/usuarios/asignaciones-sucursal/{asignacionId} | ms-users (desasigna) |
 | GET    | /api/bff/sucursales                | ms-datos         |
 | POST   | /api/bff/sucursales                | ms-datos         |
 | PUT    | /api/bff/sucursales/{id}           | ms-datos         |
@@ -195,13 +263,22 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | POST   | /api/bff/datos/{id}/reprocesar     | ms-datos         |
 | GET    | /api/bff/reportes/exportar         | ms-reportes      |
 
+> **Export de reportes** (`/reportes/exportar?formato=pdf\|xlsx&periodo=YYYY-MM[&sucursalId=N]`):
+> - **Con `sucursalId`** → reporte individual de esa sucursal.
+> - **Sin `sucursalId`** → **reporte consolidado de todas las sucursales** (tabla comparativa + fila de totales).
+> - `formato=pdf` (OpenPDF, diseño corporativo con encabezado/pie) o `xlsx` (Apache POI).
+> - ms-reportes resuelve los **nombres de sucursal** vía un cliente REST a ms-datos (`datos-api`,
+>   config `quarkus.rest-client.datos-api.url`); si ms-datos no responde, cae a "Sucursal {id}".
+> - 404 si no hay KPIs (individual: esa sucursal/período; consolidado: ningún dato en el período).
+
 ### Detalles de implementación BFF
 
-- **CORS**: habilitado para `http://localhost:5173`. ⚠️ En Quarkus 3.36 la clave es `quarkus.http.cors.enabled=true` (NO `quarkus.http.cors=true`, que se ignora silenciosamente con un warning).
+- **CORS**: habilitado para `http://localhost:5173`. ⚠️ En Quarkus 3.36 la clave es `quarkus.http.cors.enabled=true` (NO `quarkus.http.cors=true`, que se ignora silenciosamente con un warning). **El export de reportes requiere `quarkus.http.cors.exposed-headers=Content-Disposition`** — sin eso el navegador no deja leer el nombre del archivo descargado (PDF/Excel).
 - **Error propagation**: `ClientExceptionMapper` (`bff/src/main/java/com/grupofrontera/bff/exception/`) propaga códigos 4xx de los microservicios correctamente. `quarkus.rest-client.disable-default-mapper=true` en `application.properties`.
 - **Alta de usuario** (`UsuarioResource.crear`): orquesta ms-users → ms-auth. Usa `HashMap` (no `Map.of`, que lanza NPE con `fechaNacimiento=null`) y lee la entidad upstream con `Response.readEntity(...)` (no `getEntity()`, que en un cliente JAX-RS devuelve el `InputStream`). Propaga el status upstream (p. ej. 409 RUT/email duplicado).
 - **Endpoint de estado de sucursal** (`PUT /sucursales/{id}/estado`): el body espera el campo **`activo`** (booleano), no `habilitada`. Mismo contrato en ms-datos (`EstadoRequest.activo`).
 - **Sin seguridad interna**: el BFF no valida JWT — confía en que ms-auth valida. ms-users no tiene extensiones de seguridad.
+- **Asignación usuario↔sucursal**: `GET/POST /api/bff/usuarios/{usuarioId}/sucursales` y `DELETE /api/bff/usuarios/asignaciones-sucursal/{asignacionId}`. ⚠️ ms-users expone esto en **`/usuario-sucursales`** (NO en `/usuarios/{id}/sucursales`): el `UsersClient` del BFF apunta a `/usuario-sucursales`, `/usuario-sucursales/usuario/{id}` y `/usuario-sucursales/{id}/desactivar`. El POST del BFF inyecta `usuarioId` (del path) en el body `{usuarioId, sucursalId}` que espera ms-users; el GET enriquece cada asignación con `sucursalNombre` (vía ms-datos). El front usa esto en `UsersView` (botón "Asignar sucursales").
 - **Dos modelos de sucursal**: `/api/bff/sucursales` apunta a ms-datos (id: `Long`, ahora con `latitud`/`longitud`). ms-users tiene sus propias sucursales (id: `UUID`) — no expuestas en BFF.
 
 ---
@@ -211,14 +288,18 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 Puerto **8086**, BD kpis_db (puerto 5438). Requiere **RabbitMQ** corriendo en localhost:5672.
 
 - Los KPIs se calculan a partir de eventos recibidos via RabbitMQ (`venta.realizada`, `actualizacion.stock`).
-- En dev, el servicio arranca sin datos. Para tener datos de prueba insertar directamente:
+- **Ya NO arranca sin datos**: las migraciones Flyway siembran KPIs (tras `V4`: **96 KPIs = 4 sucursales × 12 meses** en `indicador_ventas` e `indicador_inventario`) — el dashboard tiene datos desde el primer arranque.
+- Las tablas reales son **`indicador_ventas`** e **`indicador_inventario`** (no existe una tabla `kpis`). Para inspeccionar o añadir datos manualmente:
 
 ```sql
--- docker exec -it pg-kpis psql -U postgres -d kpis_db
-INSERT INTO kpis (sucursal_id, periodo, total_ventas, cantidad_transacciones,
-  ticket_promedio, meta_mensual, porcentaje_cumplimiento,
-  productos_bajo_minimo, rotacion_promedio, dias_sin_reposicion)
-VALUES (1, '2026-06', 15000000, 320, 46875, 18000000, 83.3, 7, 4.2, 3);
+-- docker exec -it gf_kpis_db psql -U postgres -d kpis_db
+SELECT sucursal_ref_id, periodo, total_ventas, porcentaje_cumplimiento
+  FROM indicador_ventas ORDER BY sucursal_ref_id, periodo;
+
+INSERT INTO indicador_ventas (sucursal_ref_id, periodo, total_ventas,
+  cantidad_transacciones, ticket_promedio, meta_mensual,
+  porcentaje_cumplimiento, fecha_calculo)
+VALUES (1, '2026-07', 15847263, 421, 37642.00, 18000000, 88.04, NOW());
 ```
 
 ---
@@ -276,9 +357,9 @@ src/
     DashboardView.tsx         # KPIs reales + gráfico dinámico (obtenerKpis de los últimos 6 meses)
     ReportesView.tsx          # comparativo real + gráfico dinámico + export real, umbrales >90/60-90/<60
     InventoryView.tsx         # datos mock — sin endpoint BFF
-    UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search
-    BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre theme-aware con coords de la API
-    DatosView.tsx             # datos consolidados: filtros, reprocesar, log trazabilidad (CA-1.17–1.19)
+    UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search. Modal "Asignar sucursales" (AssignBranchesModal): toggle por sucursal → POST/DELETE asignación, enriquecido con nombres.
+    BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre theme-aware con coords de la API. Botón "Cómo llegar" en BranchMap: geolocalización del navegador → ruta OSRM (router.project-osrm.org) dibujada como capa GeoJSON, con fallback a línea recta (haversine) si OSRM falla. La ruta se limpia al cambiar de sucursal y se re-pinta tras cambio de tema.
+    DatosView.tsx             # datos consolidados: filtros (sucursal/tipo/período/estado), reprocesar, log trazabilidad (CA-1.17–1.19). El campo `valor` es JSON y se muestra parseado por tipo (parseValor). Tipo y estado son <select>; el período usa dos <input type="month"> enlazados (min/max) + chips de rango rápido (3/6/12 meses, aplican al instante) y etiqueta legible del rango.
     ReportesGuardadosView.tsx # datos mock — sin endpoint BFF
     ConfiguracionView.tsx     # perfil desde AuthContext; logout en tab Seguridad
 public/

@@ -1,12 +1,14 @@
 import { apiFetchBlob } from './client';
 
 export async function exportarReporte(
-  sucursalId: number,
+  sucursalId: number | null,
   periodo: string,
   formato: 'pdf' | 'xlsx',
   signal?: AbortSignal,
 ): Promise<void> {
-  const path = `/api/bff/reportes/exportar?sucursalId=${sucursalId}&periodo=${encodeURIComponent(periodo)}&formato=${formato}`;
+  const params = new URLSearchParams({ periodo, formato });
+  if (sucursalId != null) params.set('sucursalId', String(sucursalId));
+  const path = `/api/bff/reportes/exportar?${params.toString()}`;
   const { blob, filename } = await apiFetchBlob(path, signal);
 
   const url = URL.createObjectURL(blob);

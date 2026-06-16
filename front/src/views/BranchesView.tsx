@@ -46,23 +46,119 @@ const COORDS: Record<string, { lat: number; lng: number }> = {
 
 const DEFAULT_CENTER: [number, number] = [-70.6693, -33.4489];
 
+// Distancia geodésica (km) entre dos puntos [lng, lat] — fallback si OSRM no responde.
+function distanciaKm(a: [number, number], b: [number, number]): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLng = toRad(b[0] - a[0]);
+  const la1 = toRad(a[1]);
+  const la2 = toRad(b[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+const EMPTY_FC = { type: 'FeatureCollection', features: [] } as const;
+
 function BranchMap({ lat, lng }: { lat: number; lng: number }) {
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const readyRef = useRef(false);
   const coordsRef = useRef<[number, number]>([lng, lat]);
+  const routeRef = useRef<[number, number][] | null>(null);
+
+  const [routeStatus, setRouteStatus] = useState<'idle' | 'locating' | 'routing' | 'done' | 'error'>('idle');
+  const [routeMsg, setRouteMsg] = useState<string | null>(null);
 
   function addMarkers(map: any) {
     if (map.getSource('b')) return;
-    map.addSource('b', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    // La ruta primero, para que quede DEBAJO de los marcadores.
+    map.addSource('route', { type: 'geojson', data: EMPTY_FC });
+    map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 8, 'line-opacity': 0.55 } });
+    map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#2563EB', 'line-width': 4.5 } });
+    map.addSource('origin', { type: 'geojson', data: EMPTY_FC });
+    map.addLayer({ id: 'origin-dot', type: 'circle', source: 'origin', paint: { 'circle-radius': 6, 'circle-color': '#22C55E', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 } });
+    map.addSource('b', { type: 'geojson', data: EMPTY_FC });
     map.addLayer({ id: 'b-halo', type: 'circle', source: 'b', paint: { 'circle-radius': 13, 'circle-color': '#3B82F6', 'circle-opacity': 0.18 } });
     map.addLayer({ id: 'b-dot',  type: 'circle', source: 'b', paint: { 'circle-radius': 6,  'circle-color': '#3B82F6', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 } });
     paint(map);
+    paintRoute(map);
   }
 
   function paint(m: any) {
     const [lo, la] = coordsRef.current;
     m?.getSource('b')?.setData({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lo, la] } }] });
+  }
+
+  function paintRoute(m: any) {
+    const coords = routeRef.current;
+    m?.getSource('route')?.setData(coords
+      ? { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }
+      : EMPTY_FC);
+    m?.getSource('origin')?.setData(coords
+      ? { type: 'Feature', geometry: { type: 'Point', coordinates: coords[0] } }
+      : EMPTY_FC);
+  }
+
+  function trazarRuta() {
+    if (!navigator.geolocation) {
+      setRouteStatus('error');
+      setRouteMsg('Tu navegador no permite geolocalización.');
+      return;
+    }
+    setRouteStatus('locating');
+    setRouteMsg(null);
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        const origin: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+        const dest = coordsRef.current;
+        setRouteStatus('routing');
+        let coords: [number, number][];
+        let info: string;
+        try {
+          const url = `https://router.project-osrm.org/route/v1/driving/${origin[0]},${origin[1]};${dest[0]},${dest[1]}?overview=full&geometries=geojson`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.code === 'Ok' && data.routes?.[0]) {
+            coords = data.routes[0].geometry.coordinates as [number, number][];
+            const km = data.routes[0].distance / 1000;
+            const min = Math.round(data.routes[0].duration / 60);
+            info = `${km.toFixed(1)} km · ~${min} min en auto`;
+          } else {
+            throw new Error('sin ruta');
+          }
+        } catch {
+          coords = [origin, dest];
+          info = `${distanciaKm(origin, dest).toFixed(1)} km en línea recta (ruta no disponible)`;
+        }
+        routeRef.current = coords;
+        const map = mapRef.current;
+        if (map && readyRef.current) {
+          paintRoute(map);
+          const bounds = new maplibregl.LngLatBounds();
+          coords.forEach(c => bounds.extend(c));
+          map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 800 });
+        }
+        setRouteStatus('done');
+        setRouteMsg(info);
+      },
+      err => {
+        setRouteStatus('error');
+        setRouteMsg(err.code === 1 ? 'Permiso de ubicación denegado.' : 'No se pudo obtener tu ubicación.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  }
+
+  function limpiarRuta() {
+    routeRef.current = null;
+    setRouteStatus('idle');
+    setRouteMsg(null);
+    const map = mapRef.current;
+    if (map && readyRef.current) {
+      paintRoute(map);
+      map.flyTo({ center: coordsRef.current, zoom: 15.5, speed: 1.4, essential: true });
+    }
   }
 
   useEffect(() => {
@@ -87,7 +183,7 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cambio de tema: intercambia el basemap y vuelve a pintar el marcador (setStyle limpia capas).
+  // Cambio de tema: intercambia el basemap y vuelve a pintar marcador + ruta (setStyle limpia capas).
   useEffect(() => {
     function onPrefs() {
       const map = mapRef.current;
@@ -99,16 +195,47 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
     return () => window.removeEventListener('prefs-changed', onPrefs);
   }, []);
 
+  // Al cambiar de sucursal: limpia la ruta anterior, repinta el marcador y vuela a la nueva.
   useEffect(() => {
     coordsRef.current = [lng, lat];
+    routeRef.current = null;
+    setRouteStatus('idle');
+    setRouteMsg(null);
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
     paint(map);
+    paintRoute(map);
     map.flyTo({ center: [lng, lat], zoom: 15.5, speed: 1.4, essential: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lng, lat]);
 
-  return <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />;
+  const cargando = routeStatus === 'locating' || routeStatus === 'routing';
+  const etiqueta = routeStatus === 'locating' ? 'Ubicando…'
+    : routeStatus === 'routing' ? 'Calculando ruta…'
+    : routeStatus === 'done' ? 'Recalcular ruta'
+    : 'Cómo llegar';
+
+  return (
+    <>
+      <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />
+      <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 5, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', maxWidth: 260 }}>
+        <button className="btn btn-primary btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(37,99,235,0.95)', backdropFilter: 'blur(8px)', border: '1px solid var(--bg-border-strong)' }}
+          onClick={trazarRuta} disabled={cargando}>
+          <Icon name={cargando ? 'loader' : 'navigation'} size={14} />{etiqueta}
+        </button>
+        {routeMsg && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(26,26,26,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--bg-border-strong)', borderRadius: 8, padding: '7px 10px' }}>
+            <Icon name={routeStatus === 'error' ? 'alert-circle' : 'route'} size={13} style={{ color: routeStatus === 'error' ? 'var(--color-danger)' : 'var(--color-info)', flex: 'none' }} />
+            <span className="ds-label" style={{ fontSize: 11, color: 'var(--text-primary)' }}>{routeMsg}</span>
+            {routeStatus === 'done' && (
+              <button className="btn btn-ghost btn-icon btn-sm" style={{ height: 20, width: 20, flex: 'none' }} title="Quitar ruta" onClick={limpiarRuta}><Icon name="x" size={12} /></button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
 }
 
 interface BranchFormData { nombre: string; ciudad: string; ciudadId: number | null; codigo: string; latitud: number | null; longitud: number | null }

@@ -46,34 +46,64 @@ public class ReportesRecurso {
             @QueryParam("sucursalId") Long sucursalId,
             @QueryParam("periodo") String periodo) {
 
-        if (sucursalId == null || periodo == null || periodo.isBlank() || formato == null) {
+        if (periodo == null || periodo.isBlank() || formato == null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Los parametros formato, sucursalId y periodo son obligatorios")
+                    .entity("Los parametros formato y periodo son obligatorios")
                     .build();
         }
 
-        ReporteDashboard dashboard = reportesServicio.obtenerDashboard(sucursalId, periodo);
-        String nombreArchivo = "reporte_sucursal" + sucursalId + "_" + periodo;
-
-        return switch (formato.toLowerCase()) {
-            case "pdf" -> {
-                byte[] contenidoPdf = exportacionServicio.exportarPdf(dashboard);
-                yield Response.ok(contenidoPdf)
-                        .type("application/pdf")
-                        .header("Content-Disposition", "attachment; filename=\"" + nombreArchivo + ".pdf\"")
-                        .build();
-            }
-            case "xlsx" -> {
-                byte[] contenidoExcel = exportacionServicio.exportarExcel(dashboard);
-                yield Response.ok(contenidoExcel)
-                        .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                        .header("Content-Disposition", "attachment; filename=\"" + nombreArchivo + ".xlsx\"")
-                        .build();
-            }
-            default -> Response.status(Response.Status.BAD_REQUEST)
+        String fmt = formato.toLowerCase();
+        if (!fmt.equals("pdf") && !fmt.equals("xlsx")) {
+            return Response.status(Response.Status.BAD_REQUEST)
                     .entity("{\"error\": \"Formato no soportado. Use pdf o xlsx\"}")
                     .build();
-        };
+        }
+
+        // Sin sucursalId → reporte consolidado de TODAS las sucursales
+        if (sucursalId == null) {
+            return exportarConsolidado(fmt, periodo);
+        }
+        return exportarIndividual(fmt, sucursalId, periodo);
+    }
+
+    private Response exportarIndividual(String fmt, Long sucursalId, String periodo) {
+        ReporteDashboard dashboard = reportesServicio.obtenerDashboard(sucursalId, periodo);
+        String nombreSucursal = reportesServicio.obtenerNombresSucursales()
+                .getOrDefault(sucursalId, "Sucursal " + sucursalId);
+        String nombreArchivo = "reporte_sucursal" + sucursalId + "_" + periodo;
+
+        if (fmt.equals("pdf")) {
+            byte[] pdf = exportacionServicio.exportarPdf(dashboard, nombreSucursal);
+            return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
+        }
+        byte[] xls = exportacionServicio.exportarExcel(dashboard, nombreSucursal);
+        return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
+    }
+
+    private Response exportarConsolidado(String fmt, String periodo) {
+        List<ReporteDashboard> filas = reportesServicio.obtenerComparativo(periodo);
+        if (filas == null || filas.isEmpty()) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity("{\"error\": \"No hay KPIs para ninguna sucursal en el periodo " + periodo + "\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+        var nombres = reportesServicio.obtenerNombresSucursales();
+        String nombreArchivo = "reporte_consolidado_" + periodo;
+
+        if (fmt.equals("pdf")) {
+            byte[] pdf = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres);
+            return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
+        }
+        byte[] xls = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres);
+        return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
+    }
+
+    private Response blob(byte[] contenido, String tipo, String nombreArchivo) {
+        return Response.ok(contenido)
+                .type(tipo)
+                .header("Content-Disposition", "attachment; filename=\"" + nombreArchivo + "\"")
+                .build();
     }
 
     @GET

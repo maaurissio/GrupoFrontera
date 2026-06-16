@@ -28,6 +28,7 @@ export function ReportesView() {
   const [loadingData, setLoadingData] = useState(false);
   const [errorData, setErrorData] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [chartData, setChartData] = useState<ChartSeries | null>(null);
   const [chartStatus, setChartStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
 
@@ -93,12 +94,18 @@ export function ReportesView() {
   }, [periodo, sucursalId, fetchChart]);
 
   async function doExport(fmt: 'pdf' | 'xlsx') {
-    if (sucursalId === 'all') return;
     setExporting(fmt);
+    setExportError(null);
     try {
-      await exportarReporte(sucursalId, periodo, fmt);
-    } catch {
-      // error silencioso — podría mostrarse un toast
+      await exportarReporte(sucursalId === 'all' ? null : sucursalId, periodo, fmt);
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      const alcance = sucursalId === 'all' ? 'ninguna sucursal' : 'esta sucursal';
+      setExportError(
+        status === 404
+          ? `No hay KPIs para ${alcance} en ${periodo}. Elige otro período.`
+          : 'No se pudo generar el reporte. Intenta nuevamente.',
+      );
     } finally {
       setExporting(null);
     }
@@ -159,18 +166,26 @@ export function ReportesView() {
         )}
         <div style={{ flex: 1 }} />
         <button className="btn btn-secondary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }}
-          disabled={!!exporting || sucursalId === 'all'}
-          title={sucursalId === 'all' ? 'Selecciona una sucursal para exportar' : undefined}
+          disabled={!!exporting}
+          title={sucursalId === 'all' ? 'Exportar consolidado de todas las sucursales' : undefined}
           onClick={() => doExport('pdf')}>
           {exporting === 'pdf' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="file-text" size={14} />Exportar PDF</>}
         </button>
         <button className="btn btn-primary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }}
-          disabled={!!exporting || sucursalId === 'all'}
-          title={sucursalId === 'all' ? 'Selecciona una sucursal para exportar' : undefined}
+          disabled={!!exporting}
+          title={sucursalId === 'all' ? 'Exportar consolidado de todas las sucursales' : undefined}
           onClick={() => doExport('xlsx')}>
           {exporting === 'xlsx' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="table" size={14} />Exportar Excel</>}
         </button>
       </div>
+
+      {exportError && (
+        <div role="alert" className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+          <Icon name="alert-circle" size={16} />
+          <span className="ds-sm">{exportError}</span>
+          <button className="btn btn-ghost btn-icon btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setExportError(null)}><Icon name="x" size={14} /></button>
+        </div>
+      )}
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>

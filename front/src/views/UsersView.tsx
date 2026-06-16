@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Panel, ColorAvatar, ModalOverlay } from '../components/Primitives';
 import { DATA } from '../data';
-import { listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario } from '../api/usuarios';
-import type { UsuarioDTO } from '../api/types';
+import { listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario, listarSucursalesUsuario, asignarSucursal, desasignarSucursal } from '../api/usuarios';
+import { listarSucursales } from '../api/sucursales';
+import type { UsuarioDTO, SucursalDTO, AsignacionSucursalDTO } from '../api/types';
 import { ApiError } from '../api/types';
 import { validarRut, formatearRut } from '../utils/rut';
 import { useDebounce } from '../hooks/useDebounce';
@@ -194,6 +195,136 @@ function ConfirmModal({ user, onClose, onConfirmed }: { user: UsuarioDTO; onClos
   );
 }
 
+function AssignBranchesModal({ user, onClose, onChanged }: { user: UsuarioDTO; onClose: () => void; onChanged: () => void }) {
+  const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
+  const [asignadas, setAsignadas] = useState<AsignacionSucursalDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const [sucs, asigs] = await Promise.all([
+          listarSucursales(ac.signal),
+          listarSucursalesUsuario(user.id, ac.signal),
+        ]);
+        setSucursales(sucs);
+        setAsignadas(asigs);
+      } catch {
+        if (!ac.signal.aborted) setError('No se pudieron cargar las sucursales.');
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
+      }
+    })();
+    return () => { aliveRef.current = false; ac.abort(); };
+  }, [user.id]);
+
+  const asignacionDe = (sucId: number) => asignadas.find(a => a.sucursalId === sucId);
+
+  async function toggle(suc: SucursalDTO) {
+    if (busy != null) return;
+    const ya = asignacionDe(suc.id);
+    setBusy(suc.id);
+    setError(null);
+    try {
+      if (ya) {
+        await desasignarSucursal(ya.id);
+        if (!aliveRef.current) return;
+        setAsignadas(prev => prev.filter(a => a.sucursalId !== suc.id));
+      } else {
+        await asignarSucursal(user.id, suc.id);
+        // Recarga para obtener el id de la nueva asignación (necesario para desasignar).
+        const fresh = await listarSucursalesUsuario(user.id);
+        if (!aliveRef.current) return;
+        setAsignadas(fresh);
+      }
+      setDirty(true);
+    } catch (err) {
+      if (!aliveRef.current) return;
+      if (err instanceof ApiError && err.status === 409) {
+        // Estado desincronizado (p. ej. ya estaba asignada): resincroniza desde el servidor.
+        setError('La asignación ya había cambiado; se actualizó la lista.');
+        try { setAsignadas(await listarSucursalesUsuario(user.id)); } catch { /* ignore */ }
+        setDirty(true);
+      } else {
+        setError('No se pudo actualizar la asignación. Intenta nuevamente.');
+      }
+    } finally {
+      if (aliveRef.current) setBusy(null);
+    }
+  }
+
+  function handleClose() {
+    if (dirty) onChanged();
+    onClose();
+  }
+
+  return (
+    <ModalOverlay onClose={handleClose}>
+      <div className="card" style={{ width: 460, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <h2 className="ds-h2" style={{ margin: 0 }}>Asignar sucursales</h2>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={handleClose}><Icon name="x" size={16} /></button>
+        </div>
+        <p className="ds-sm" style={{ margin: '0 0 16px', color: 'var(--text-secondary)' }}>
+          Sucursales de <b style={{ color: 'var(--text-primary)' }}>{user.nombre} {user.apellido}</b>
+        </p>
+
+        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 12 }}>{error}</div>}
+
+        {loading ? (
+          <div style={{ padding: 28, textAlign: 'center' }}>
+            <Icon name="loader" size={18} style={{ color: 'var(--text-disabled)' }} />
+          </div>
+        ) : sucursales.length === 0 ? (
+          <div className="ds-sm" style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)' }}>No hay sucursales disponibles.</div>
+        ) : (
+          <div className="ds-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+            {sucursales.map(s => {
+              const ya = asignacionDe(s.id);
+              const enProceso = busy === s.id;
+              return (
+                <button key={s.id} onClick={() => toggle(s)} disabled={busy != null}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', width: '100%',
+                    padding: '10px 12px', borderRadius: 10, cursor: busy != null ? 'default' : 'pointer',
+                    background: ya ? 'var(--bg-surface-3)' : 'var(--bg-surface-1)',
+                    border: '1px solid ' + (ya ? 'var(--color-info)' : 'var(--bg-border)'),
+                  }}>
+                  <span style={{
+                    width: 20, height: 20, flex: 'none', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: ya ? 'var(--color-info)' : 'transparent',
+                    border: '1px solid ' + (ya ? 'var(--color-info)' : 'var(--bg-border-strong)'),
+                    color: '#fff',
+                  }}>
+                    {ya && <Icon name="check" size={13} />}
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.nombre}</div>
+                    <div className="ds-label" style={{ fontSize: 11 }}>{s.ciudad}{s.codigo ? ` · ${s.codigo}` : ''}{!s.habilitada ? ' · inactiva' : ''}</div>
+                  </div>
+                  {enProceso
+                    ? <Icon name="loader" size={14} style={{ color: 'var(--text-disabled)' }} />
+                    : <span className="ds-label" style={{ fontSize: 11, color: ya ? 'var(--color-info)' : 'var(--text-secondary)' }}>{ya ? 'Asignada' : 'Asignar'}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+          <button className="btn btn-primary" onClick={handleClose}>Listo</button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
 function UserDetailModal({ user, onClose }: { user: UsuarioDTO; onClose: () => void }) {
   const em = DATA.estadoMeta[user.estado] ?? { kind: 'neutral' };
   const rutDisplay = formatearRut(user.rut, user.dv);
@@ -247,6 +378,7 @@ export function UsersView() {
   const [create, setCreate] = useState(false);
   const [confirm, setConfirm] = useState<UsuarioDTO | null>(null);
   const [detail, setDetail] = useState<UsuarioDTO | null>(null);
+  const [assign, setAssign] = useState<UsuarioDTO | null>(null);
 
   const fetchUsuarios = useCallback(async () => {
     setStatus('loading');
@@ -339,6 +471,7 @@ export function UsersView() {
                       <td><Badge kind={em.kind} dot={u.estado !== 'INACTIVO'}>{u.estado}</Badge></td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Asignar sucursales a ${u.nombre} ${u.apellido}`} title="Asignar sucursales" onClick={() => setAssign(u)}><Icon name="store" size={14} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Ver detalle de ${u.nombre} ${u.apellido}`} title="Ver detalle" onClick={() => setDetail(u)}><Icon name="eye" size={14} /></button>
                           <button className="btn btn-ghost btn-sm" style={{ height: 28, color: off ? 'var(--color-danger)' : 'var(--color-success)' }} onClick={() => setConfirm(u)}>{off ? 'Desactivar' : 'Activar'}</button>
                         </div>
@@ -367,6 +500,7 @@ export function UsersView() {
       {create && <CreateUserModal onClose={() => setCreate(false)} onCreated={fetchUsuarios} />}
       {confirm && <ConfirmModal user={confirm} onClose={() => setConfirm(null)} onConfirmed={handleConfirmed} />}
       {detail && <UserDetailModal user={detail} onClose={() => setDetail(null)} />}
+      {assign && <AssignBranchesModal user={assign} onClose={() => setAssign(null)} onChanged={fetchUsuarios} />}
     </div>
   );
 }

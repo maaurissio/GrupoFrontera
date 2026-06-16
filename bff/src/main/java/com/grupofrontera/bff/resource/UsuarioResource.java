@@ -8,6 +8,7 @@ import com.grupofrontera.bff.dto.UsuarioCreateRequest;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -119,14 +120,40 @@ public class UsuarioResource {
 
     @GET
     @Path("/{usuarioId}/sucursales")
+    @SuppressWarnings("unchecked")
     public List<Object> listarSucursales(@PathParam("usuarioId") UUID usuarioId) {
-        return usersClient.listarSucursalesPorUsuario(usuarioId);
+        List<Object> asignaciones = usersClient.listarSucursalesPorUsuario(usuarioId);
+        if (asignaciones != null) {
+            Map<Long, String> nombres = mapaNombresSucursal();
+            for (Object a : asignaciones) {
+                if (a instanceof Map) {
+                    Map<String, Object> m = (Map<String, Object>) a;
+                    Object sid = m.get("sucursalId");
+                    if (sid instanceof Number) {
+                        long id = ((Number) sid).longValue();
+                        m.put("sucursalNombre", nombres.getOrDefault(id, "Sucursal " + id));
+                    }
+                }
+            }
+        }
+        return asignaciones;
     }
 
     @POST
     @Path("/{usuarioId}/sucursales")
     public Response asignarSucursal(@PathParam("usuarioId") UUID usuarioId, Map<String, Object> body) {
-        return usersClient.asignarSucursal(usuarioId, body);
+        // ms-users espera { usuarioId, sucursalId } en el body de POST /usuario-sucursales.
+        // El front solo envia { sucursalId }; aqui inyectamos el usuarioId del path.
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("usuarioId", usuarioId.toString());
+        payload.put("sucursalId", body != null ? body.get("sucursalId") : null);
+        return usersClient.asignarSucursal(payload);
+    }
+
+    @DELETE
+    @Path("/asignaciones-sucursal/{asignacionId}")
+    public Response desasignarSucursal(@PathParam("asignacionId") UUID asignacionId) {
+        return usersClient.desasignarSucursal(asignacionId);
     }
 
     // ------------------------------------------------------------------
