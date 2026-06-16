@@ -26,13 +26,4 @@ class UsersResourceTest {
              .statusCode(200)
              .body(notNullValue());
     }
-
-    @Test
-    void testListarRegiones() {
-        given()
-          .when().get("/regiones")
-          .then()
-             .statusCode(200)
-             .body(notNullValue());
-    }
 }

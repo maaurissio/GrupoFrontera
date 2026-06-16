@@ -1,11 +1,13 @@
 package com.grupofrontera.bff.client;
 
+import com.grupofrontera.bff.dto.CiudadDTO;
 import com.grupofrontera.bff.dto.DatoConsolidadoDTO;
 import com.grupofrontera.bff.dto.DatoConsolidadoRequestDTO;
 import com.grupofrontera.bff.dto.EstadoDTO;
 import com.grupofrontera.bff.dto.FuenteDTO;
 import com.grupofrontera.bff.dto.FuenteRequestDTO;
 import com.grupofrontera.bff.dto.LogTrazabilidadDTO;
+import com.grupofrontera.bff.dto.RegionDTO;
 import com.grupofrontera.bff.dto.SucursalDTO;
 import com.grupofrontera.bff.dto.SucursalRequestDTO;
 import jakarta.ws.rs.Consumes;
@@ -68,6 +70,24 @@ public interface DatosClient {
     @PUT
     @Path("/sucursales/{id}/estado")
     SucursalDTO cambiarEstadoSucursal(@PathParam("id") Long id, EstadoDTO request);
+
+    // Regiones (catalogo geografico)
+    @GET
+    @Path("/regiones")
+    List<RegionDTO> listarRegiones();
+
+    @POST
+    @Path("/regiones")
+    Response crearRegion(RegionDTO request);
+
+    // Ciudades (catalogo geografico, filtrable por region)
+    @GET
+    @Path("/ciudades")
+    List<CiudadDTO> listarCiudades(@QueryParam("regionId") Long regionId);
+
+    @POST
+    @Path("/ciudades")
+    Response crearCiudad(CiudadDTO request);
 
     // Datos Consolidados
     @POST

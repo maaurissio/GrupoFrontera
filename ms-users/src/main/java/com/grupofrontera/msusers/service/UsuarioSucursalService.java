@@ -2,10 +2,8 @@ package com.grupofrontera.msusers.service;
 
 import com.grupofrontera.msusers.dto.UsuarioSucursalRequestDTO;
 import com.grupofrontera.msusers.dto.UsuarioSucursalResponseDTO;
-import com.grupofrontera.msusers.entity.Sucursal;
 import com.grupofrontera.msusers.entity.Usuario;
 import com.grupofrontera.msusers.entity.UsuarioSucursal;
-import com.grupofrontera.msusers.repository.SucursalRepository;
 import com.grupofrontera.msusers.repository.UsuarioRepository;
 import com.grupofrontera.msusers.repository.UsuarioSucursalRepository;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -29,9 +27,6 @@ public class UsuarioSucursalService {
     @Inject
     UsuarioRepository usuarioRepository;
 
-    @Inject
-    SucursalRepository sucursalRepository;
-
     public List<UsuarioSucursalResponseDTO> listarActivos() {
         return usuarioSucursalRepository.list("activo", true).stream()
                 .map(this::toDTO)
@@ -46,10 +41,8 @@ public class UsuarioSucursalService {
                 .collect(Collectors.toList());
     }
 
-    public List<UsuarioSucursalResponseDTO> listarUsuariosPorSucursal(UUID sucursalId) {
-        Sucursal sucursal = sucursalRepository.findByIdOptional(sucursalId)
-                .orElseThrow(() -> new NotFoundException("Sucursal no encontrada: " + sucursalId));
-        return usuarioSucursalRepository.listarUsuariosPorSucursal(sucursal).stream()
+    public List<UsuarioSucursalResponseDTO> listarUsuariosPorSucursal(Long sucursalRefId) {
+        return usuarioSucursalRepository.listarUsuariosPorSucursal(sucursalRefId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
@@ -58,14 +51,15 @@ public class UsuarioSucursalService {
     public UsuarioSucursalResponseDTO asignarSucursal(UsuarioSucursalRequestDTO dto) {
         Usuario usuario = usuarioRepository.findByIdOptional(dto.usuarioId)
                 .orElseThrow(() -> new NotFoundException("Usuario no encontrado: " + dto.usuarioId));
-        Sucursal sucursal = sucursalRepository.findByIdOptional(dto.sucursalId)
-                .orElseThrow(() -> new NotFoundException("Sucursal no encontrada: " + dto.sucursalId));
-        if (usuarioSucursalRepository.existeAsignacionActiva(usuario, sucursal)) {
+        if (dto.sucursalId == null) {
+            throw new WebApplicationException("sucursalId es obligatorio", Response.Status.BAD_REQUEST);
+        }
+        if (usuarioSucursalRepository.existeAsignacionActiva(usuario, dto.sucursalId)) {
             throw new WebApplicationException("El usuario ya tiene esa sucursal asignada", Response.Status.CONFLICT);
         }
         UsuarioSucursal us = new UsuarioSucursal();
         us.usuario = usuario;
-        us.sucursal = sucursal;
+        us.sucursalRefId = dto.sucursalId;
         us.asignadoEn = LocalDateTime.now();
         us.activo = true;
         usuarioSucursalRepository.persist(us);
@@ -84,8 +78,7 @@ public class UsuarioSucursalService {
         dto.id = us.id;
         dto.usuarioId = us.usuario.id;
         dto.nombreUsuario = us.usuario.nombre + " " + us.usuario.apellido;
-        dto.sucursalId = us.sucursal.id;
-        dto.nombreSucursal = us.sucursal.nombre;
+        dto.sucursalId = us.sucursalRefId;
         dto.asignadoEn = us.asignadoEn;
         return dto;
     }

@@ -120,8 +120,8 @@ public class UsuarioService {
         dto.roles = usuarioRolRepository.listarRolesPorUsuario(u).stream()
                 .map(ur -> ur.rol.nombre.name())
                 .collect(Collectors.toList());
-        dto.sucursales = usuarioSucursalRepository.listarSucursalesPorUsuario(u).stream()
-                .map(us -> us.sucursal.nombre)
+        dto.sucursalRefIds = usuarioSucursalRepository.listarSucursalesPorUsuario(u).stream()
+                .map(us -> us.sucursalRefId)
                 .collect(Collectors.toList());
         return dto;
     }

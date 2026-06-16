@@ -13,6 +13,6 @@ COPY --from=build /build/target/quarkus-app/lib/ ./lib/
 COPY --from=build /build/target/quarkus-app/*.jar ./
 COPY --from=build /build/target/quarkus-app/app/ ./app/
 COPY --from=build /build/target/quarkus-app/quarkus/ ./quarkus/
-EXPOSE 8085
+EXPOSE 8087
 ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0"
 ENTRYPOINT ["java", "-jar", "/deployments/quarkus-run.jar"]

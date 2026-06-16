@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, ModalOverlay } from '../components/Primitives';
 import { listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal } from '../api/sucursales';
-import type { SucursalDTO } from '../api/types';
+import { listarRegiones, listarCiudades } from '../api/geografia';
+import type { SucursalDTO, RegionDTO, CiudadDTO } from '../api/types';
 
 declare const maplibregl: any;
 
@@ -110,7 +111,7 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
   return <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />;
 }
 
-interface BranchFormData { nombre: string; ciudad: string; codigo: string; latitud: number | null; longitud: number | null }
+interface BranchFormData { nombre: string; ciudad: string; ciudadId: number | null; codigo: string; latitud: number | null; longitud: number | null }
 
 function BranchModal({ mode, data, onSave, onClose }: {
   mode: 'new' | 'edit';
@@ -119,23 +120,58 @@ function BranchModal({ mode, data, onSave, onClose }: {
   onClose: () => void;
 }) {
   const [nombre, setNombre] = useState(data?.nombre ?? '');
-  const [ciudad, setCiudad] = useState(data?.ciudad ?? '');
   const [codigo, setCodigo] = useState(data?.codigo ?? '');
+  const [regionId, setRegionId] = useState<number | ''>('');
+  const [ciudadId, setCiudadId] = useState<number | ''>('');
   const [lat, setLat] = useState(data?.latitud != null ? String(data.latitud) : '');
   const [lng, setLng] = useState(data?.longitud != null ? String(data.longitud) : '');
+  const [regiones, setRegiones] = useState<RegionDTO[]>([]);
+  const [ciudades, setCiudades] = useState<CiudadDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Carga el catalogo geografico (regiones + ciudades) una sola vez.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const [regs, ciuds] = await Promise.all([
+          listarRegiones(ctrl.signal),
+          listarCiudades(undefined, ctrl.signal),
+        ]);
+        setRegiones(regs);
+        setCiudades(ciuds);
+        // En edicion, preselecciona region+ciudad a partir del ciudadId guardado.
+        if (data?.ciudadId != null) {
+          const c = ciuds.find(x => x.id === data.ciudadId);
+          if (c) { setRegionId(c.regionId); setCiudadId(c.id); }
+        }
+      } catch {
+        if (!ctrl.signal.aborted) setError('No se pudo cargar regiones/ciudades.');
+      }
+    })();
+    return () => ctrl.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const ciudadesRegion = useMemo(
+    () => (regionId === '' ? [] : ciudades.filter(c => c.regionId === regionId)),
+    [ciudades, regionId],
+  );
+
   async function handleSave() {
-    if (!nombre || !ciudad) { setError('Nombre y ciudad son obligatorios.'); return; }
+    if (regionId === '') { setError('La región es obligatoria.'); return; }
+    if (!nombre.trim()) { setError('El nombre es obligatorio.'); return; }
+    if (ciudadId === '') { setError('La ciudad es obligatoria.'); return; }
     const latNum = lat.trim() === '' ? null : Number(lat);
     const lngNum = lng.trim() === '' ? null : Number(lng);
     if (latNum != null && (Number.isNaN(latNum) || latNum < -90 || latNum > 90)) { setError('La latitud debe estar entre -90 y 90.'); return; }
     if (lngNum != null && (Number.isNaN(lngNum) || lngNum < -180 || lngNum > 180)) { setError('La longitud debe estar entre -180 y 180.'); return; }
     if ((latNum == null) !== (lngNum == null)) { setError('Ingresa latitud y longitud, o deja ambas vacías.'); return; }
+    const ciudadNombre = ciudades.find(c => c.id === ciudadId)?.nombre ?? '';
     setLoading(true);
     try {
-      await onSave({ nombre, ciudad, codigo, latitud: latNum, longitud: lngNum });
+      await onSave({ nombre: nombre.trim(), ciudad: ciudadNombre, ciudadId, codigo: codigo.trim(), latitud: latNum, longitud: lngNum });
     } catch {
       setError('Ha ocurrido un error. Intente más tarde.');
     } finally {
@@ -152,15 +188,30 @@ function BranchModal({ mode, data, onSave, onClose }: {
         </div>
         {error && <div role="alert" style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 14 }}>{error}</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="field"><label className="field-label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="SUC-01" /></div>
+          <div className="field">
+            <label className="field-label">Región *</label>
+            <select className="input" value={regionId}
+              onChange={e => { const v = e.target.value === '' ? '' : Number(e.target.value); setRegionId(v); setCiudadId(''); }}>
+              <option value="">Selecciona una región…</option>
+              {regiones.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+          </div>
           <div className="field"><label className="field-label">Nombre *</label><input className="input" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la sucursal" /></div>
-          <div className="field"><label className="field-label">Ciudad *</label><input className="input" value={ciudad} onChange={e => setCiudad(e.target.value)} placeholder="Ciudad" /></div>
+          <div className="field">
+            <label className="field-label">Ciudad *</label>
+            <select className="input" value={ciudadId} disabled={regionId === ''}
+              onChange={e => setCiudadId(e.target.value === '' ? '' : Number(e.target.value))}>
+              <option value="">{regionId === '' ? 'Primero elige una región' : 'Selecciona una ciudad…'}</option>
+              {ciudadesRegion.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <div className="field"><label className="field-label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="SUC-01" /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div className="field"><label className="field-label">Latitud</label><input className="input" value={lat} onChange={e => setLat(e.target.value)} placeholder="-33.4489" inputMode="decimal" /></div>
             <div className="field"><label className="field-label">Longitud</label><input className="input" value={lng} onChange={e => setLng(e.target.value)} placeholder="-70.6693" inputMode="decimal" /></div>
           </div>
           <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: -4 }}>
-            Opcional — define la ubicación exacta en el mapa. Déjalas vacías para usar el centro por defecto.
+            Latitud y longitud son opcionales — definen la ubicación exacta en el mapa.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
@@ -168,6 +219,75 @@ function BranchModal({ mode, data, onSave, onClose }: {
           <button className="btn btn-primary" onClick={handleSave} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {loading ? <><Icon name="loader" size={16} />Guardando…</> : <><Icon name="check-circle-2" size={16} />{mode === 'new' ? 'Crear' : 'Guardar'}</>}
           </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+// Mapa grande con TODAS las sucursales (marcadores + popup con el nombre).
+function AllBranchesMap({ branches }: { branches: SucursalDTO[] }) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+
+  // Resuelve coords: las guardadas en la sucursal, o la tabla estatica por nombre.
+  const puntos = useMemo(() => branches.map(b => {
+    const fallback = COORDS[b.nombre];
+    const lat = b.latitud != null ? b.latitud : fallback?.lat;
+    const lng = b.longitud != null ? b.longitud : fallback?.lng;
+    return (lat != null && lng != null) ? { b, lat, lng } : null;
+  }).filter((x): x is { b: SucursalDTO; lat: number; lng: number } => x != null), [branches]);
+
+  useEffect(() => {
+    if (!window.maplibregl && !mapRef.current) {
+      import('maplibre-gl').then(ml => { (window as any).maplibregl = ml.default; init(); });
+    } else { init(); }
+
+    function init() {
+      if (!maplibregl || !elRef.current || mapRef.current) return;
+      import('maplibre-gl/dist/maplibre-gl.css').catch(() => {});
+      const map = new maplibregl.Map({
+        container: elRef.current, style: makeMapStyle(currentTheme()),
+        center: DEFAULT_CENTER, zoom: 3.4,
+        attributionControl: { compact: true },
+      });
+      mapRef.current = map;
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+      map.on('load', () => {
+        const bounds = new maplibregl.LngLatBounds();
+        puntos.forEach(({ b, lat, lng }) => {
+          const color = b.habilitada ? '#3B82F6' : '#9CA3AF';
+          const popup = new maplibregl.Popup({ offset: 18, closeButton: false })
+            .setHTML(`<strong>${b.nombre}</strong><br/>${b.ciudad}`);
+          new maplibregl.Marker({ color }).setLngLat([lng, lat]).setPopup(popup).addTo(map);
+          bounds.extend([lng, lat]);
+        });
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds, { padding: 70, maxZoom: 11, duration: 0 });
+        }
+      });
+    }
+
+    return () => { mapRef.current?.remove(); mapRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />;
+}
+
+function AllBranchesMapModal({ branches, onClose }: { branches: SucursalDTO[]; onClose: () => void }) {
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card" style={{ width: 'min(1100px, 92vw)', height: '80vh', padding: 0, display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--bg-border)' }}>
+          <div>
+            <h2 className="ds-h2" style={{ margin: 0 }}>Todas las sucursales</h2>
+            <div className="ds-label" style={{ fontSize: 11, marginTop: 2 }}>{branches.length} sucursales en el mapa</div>
+          </div>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <AllBranchesMap branches={branches} />
         </div>
       </div>
     </ModalOverlay>
@@ -221,6 +341,7 @@ export function BranchesView() {
   const [sel, setSel] = useState(0);
   const [modal, setModal] = useState<{ mode: 'new' | 'edit'; data?: Partial<SucursalDTO> } | null>(null);
   const [confirm, setConfirm] = useState<SucursalDTO | null>(null);
+  const [showAllMap, setShowAllMap] = useState(false);
 
   const fetchBranches = useCallback(async () => {
     setStatus('loading');
@@ -333,6 +454,13 @@ export function BranchesView() {
 
           <div className="card" style={{ padding: 0, position: 'relative', height: 560, overflow: 'hidden' }}>
             {b && <BranchMap lat={lat} lng={lng} />}
+            {branches.length > 0 && (
+              <button className="btn btn-secondary btn-sm"
+                style={{ position: 'absolute', top: 16, right: 16, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(26,26,26,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--bg-border-strong)' }}
+                onClick={() => setShowAllMap(true)}>
+                <Icon name="map" size={14} />Ver todas en el mapa
+              </button>
+            )}
             {b && (
               <div style={{ position: 'absolute', top: 16, left: 16, width: 280, background: 'rgba(26,26,26,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--bg-border-strong)', borderRadius: 12, padding: 16, boxShadow: 'var(--shadow-pop)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -380,6 +508,10 @@ export function BranchesView() {
           onConfirm={() => toggleEstado(confirm)}
           onClose={() => setConfirm(null)}
         />
+      )}
+
+      {showAllMap && (
+        <AllBranchesMapModal branches={branches} onClose={() => setShowAllMap(false)} />
       )}
     </div>
   );

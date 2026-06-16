@@ -9,6 +9,7 @@ public class SucursalResponse {
     public String codigo;
     public String nombre;
     public String ciudad;
+    public Long ciudadId;
     public Boolean habilitada;
     public Double latitud;
     public Double longitud;
@@ -21,6 +22,7 @@ public class SucursalResponse {
         r.codigo = sucursal.codigo;
         r.nombre = sucursal.nombre;
         r.ciudad = sucursal.ciudad;
+        r.ciudadId = sucursal.ciudadId;
         r.habilitada = sucursal.habilitada;
         r.latitud = sucursal.latitud;
         r.longitud = sucursal.longitud;

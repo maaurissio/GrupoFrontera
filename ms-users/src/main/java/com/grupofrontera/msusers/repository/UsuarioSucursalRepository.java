@@ -1,6 +1,5 @@
 package com.grupofrontera.msusers.repository;
 
-import com.grupofrontera.msusers.entity.Sucursal;
 import com.grupofrontera.msusers.entity.Usuario;
 import com.grupofrontera.msusers.entity.UsuarioSucursal;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
@@ -12,8 +11,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class UsuarioSucursalRepository implements PanacheRepositoryBase<UsuarioSucursal, UUID> {
 
-    public boolean existeAsignacionActiva(Usuario usuario, Sucursal sucursal) {
-        return find("usuario = ?1 and sucursal = ?2 and activo = true", usuario, sucursal)
+    public boolean existeAsignacionActiva(Usuario usuario, Long sucursalRefId) {
+        return find("usuario = ?1 and sucursalRefId = ?2 and activo = true", usuario, sucursalRefId)
                 .firstResultOptional().isPresent();
     }
 
@@ -21,7 +20,7 @@ public class UsuarioSucursalRepository implements PanacheRepositoryBase<UsuarioS
         return list("usuario = ?1 and activo = true", usuario);
     }
 
-    public List<UsuarioSucursal> listarUsuariosPorSucursal(Sucursal sucursal) {
-        return list("sucursal = ?1 and activo = true", sucursal);
+    public List<UsuarioSucursal> listarUsuariosPorSucursal(Long sucursalRefId) {
+        return list("sucursalRefId = ?1 and activo = true", sucursalRefId);
     }
 }

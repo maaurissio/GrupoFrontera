@@ -13,6 +13,9 @@ public class SucursalRequest {
     @NotBlank(message = "La ciudad es obligatoria")
     public String ciudad;
 
+    // Referencia opcional a la ciudad del catalogo (ms-datos).
+    public Long ciudadId;
+
     public Double latitud;
 
     public Double longitud;

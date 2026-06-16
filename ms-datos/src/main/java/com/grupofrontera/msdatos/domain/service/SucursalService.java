@@ -38,6 +38,7 @@ public class SucursalService {
         sucursal.codigo = datos.codigo;
         sucursal.nombre = datos.nombre;
         sucursal.ciudad = datos.ciudad;
+        sucursal.ciudadId = datos.ciudadId;
         sucursal.latitud = datos.latitud;
         sucursal.longitud = datos.longitud;
         sucursal.updatedAt = LocalDateTime.now();

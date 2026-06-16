@@ -50,29 +50,14 @@ public interface UsersClient {
     @POST @Path("/roles")
     Response crearRol(Object request);
 
-    // Sucursales (ms-users)
-    @GET @Path("/sucursales")
-    List<Object> listarSucursalesUsers();
-
-    @POST @Path("/sucursales")
-    Response crearSucursalUsers(Object request);
-
     // Usuario-Rol
     @POST @Path("/usuarios/{usuarioId}/roles")
     Response asignarRol(@PathParam("usuarioId") UUID usuarioId, Object request);
 
-    // Usuario-Sucursal
+    // Usuario-Sucursal (asignacion; la sucursal vive en ms-datos)
     @GET @Path("/usuarios/{usuarioId}/sucursales")
     List<Object> listarSucursalesPorUsuario(@PathParam("usuarioId") UUID usuarioId);
 
     @POST @Path("/usuarios/{usuarioId}/sucursales")
     Response asignarSucursal(@PathParam("usuarioId") UUID usuarioId, Object request);
-
-    // Regiones
-    @GET @Path("/regiones")
-    List<Object> listarRegiones();
-
-    // Ciudades
-    @GET @Path("/ciudades")
-    List<Object> listarCiudades();
 }

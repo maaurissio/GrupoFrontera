@@ -4,5 +4,6 @@ import java.util.UUID;
 
 public class UsuarioSucursalRequestDTO {
     public UUID usuarioId;
-    public UUID sucursalId;
+    // Id de la sucursal en ms-datos (referencia logica).
+    public Long sucursalId;
 }

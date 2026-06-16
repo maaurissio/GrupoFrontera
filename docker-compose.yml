@@ -1,29 +1,32 @@
 # ================================================================
-# GrupoFrontera — Docker Compose Global
+# GrupoFrontera — Docker Compose Global (TODO en contenedores)
 #
-# LEVANTAR TODO:
-#   Paso 1 — empaquetar cada servicio (solo la primera vez o tras cambios):
-#     cd ms-auth     && ./mvnw package -DskipTests && cd ..
-#     cd ms-users    && ./mvnw package -DskipTests && cd ..
-#     cd ms-datos    && ./mvnw package -DskipTests && cd ..
-#     cd ms-kpis     && ./mvnw package -DskipTests && cd ..
-#     cd ms-reportes && ./mvnw package -DskipTests && cd ..
-#     cd bff         && ./mvnw package -DskipTests && cd ..
+# Cada servicio se construye DENTRO de Docker (multi-stage):
+# no necesitas Maven ni Node instalados localmente.
 #
-#   Paso 2 — levantar todo:
-#     docker compose up -d
+# LEVANTAR TODO (build + run):
+#   docker compose up -d --build
 #
-# SOLO INFRAESTRUCTURA (desarrollo con ./mvnw quarkus:dev):
+# Ver logs:        docker compose logs -f
+# Apagar todo:     docker compose down
+# Apagar + borrar datos: docker compose down -v
+#
+# SOLO INFRAESTRUCTURA (si quieres correr los ms con ./mvnw quarkus:dev):
 #   docker compose up -d auth-db users-db datos-db kpis-db rabbitmq
 #
-# PUERTOS (todos >= 8085 para evitar conflictos con Jenkins:8080 y SSRS:8082):
+# ACCESOS (desde el navegador / host):
+#   front       → http://localhost:5173
+#   bff         → http://localhost:8090
 #   ms-auth     → http://localhost:8088
 #   ms-users    → http://localhost:8085
 #   ms-datos    → http://localhost:8089
 #   ms-kpis     → http://localhost:8086
 #   ms-reportes → http://localhost:8087
-#   bff         → http://localhost:8090
 #   RabbitMQ UI → http://localhost:15672  (guest/guest)
+#
+# NOTA: detén los contenedores manuales viejos antes de levantar esto
+#       (pg-auth, pg-users, pg-datos, pg-kpis, rabbitmq) para no chocar puertos:
+#       docker rm -f pg-auth pg-users pg-datos pg-kpis rabbitmq
 # ================================================================
 
 services:
@@ -33,14 +36,14 @@ services:
   # ==============================================================
 
   auth-db:
-    image: postgres:15-alpine
-    container_name: auth_db
+    image: postgres:16-alpine
+    container_name: gf_auth_db
     environment:
       POSTGRES_DB: auth_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5433:5432"
+      - "5435:5432"
     volumes:
       - auth_db_datos:/var/lib/postgresql/data
     healthcheck:
@@ -50,8 +53,8 @@ services:
       retries: 5
 
   users-db:
-    image: postgres:15-alpine
-    container_name: users_db
+    image: postgres:16-alpine
+    container_name: gf_users_db
     environment:
       POSTGRES_DB: users_db
       POSTGRES_USER: postgres
@@ -67,14 +70,14 @@ services:
       retries: 5
 
   datos-db:
-    image: postgres:15-alpine
-    container_name: datos_db
+    image: postgres:16-alpine
+    container_name: gf_datos_db
     environment:
       POSTGRES_DB: datos_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5435:5432"
+      - "5437:5432"
     volumes:
       - datos_db_datos:/var/lib/postgresql/data
     healthcheck:
@@ -84,8 +87,8 @@ services:
       retries: 5
 
   kpis-db:
-    image: postgres:15-alpine
-    container_name: kpis_db
+    image: postgres:16-alpine
+    container_name: gf_kpis_db
     environment:
       POSTGRES_DB: kpis_db
       POSTGRES_USER: postgres
@@ -102,7 +105,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: grupofrontera_rabbitmq
+    container_name: gf_rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -118,15 +121,14 @@ services:
       retries: 5
 
   # ==============================================================
-  # MICROSERVICIOS
-  # Requieren ./mvnw package -DskipTests previo en cada directorio.
+  # MICROSERVICIOS — se compilan dentro de Docker (multi-stage)
   # ==============================================================
 
   ms-auth:
     build:
-      context: ms-auth
-      dockerfile: src/main/docker/Dockerfile.jvm
-    container_name: ms_auth
+      context: ./ms-auth
+      dockerfile: Dockerfile
+    container_name: gf_ms_auth
     image: grupofrontera/ms-auth:latest
     ports:
       - "8088:8088"
@@ -135,21 +137,16 @@ services:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://auth-db:5432/auth_db
       QUARKUS_DATASOURCE_USERNAME: postgres
       QUARKUS_DATASOURCE_PASSWORD: postgres
-      QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
     depends_on:
       auth-db:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     restart: on-failure
 
   ms-users:
     build:
-      context: ms-users
-      dockerfile: src/main/docker/Dockerfile.jvm
-    container_name: ms_users
+      context: ./ms-users
+      dockerfile: Dockerfile
+    container_name: gf_ms_users
     image: grupofrontera/ms-users:latest
     ports:
       - "8085:8085"
@@ -158,30 +155,27 @@ services:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://users-db:5432/users_db
       QUARKUS_DATASOURCE_USERNAME: postgres
       QUARKUS_DATASOURCE_PASSWORD: postgres
-      QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
     depends_on:
       users-db:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     restart: on-failure
 
   ms-datos:
     build:
-      context: ms-datos
-      dockerfile: src/main/docker/Dockerfile.jvm
-    container_name: ms_datos
+      context: ./ms-datos
+      dockerfile: Dockerfile
+    container_name: gf_ms_datos
     image: grupofrontera/ms-datos:latest
     ports:
       - "8089:8089"
     environment:
+      QUARKUS_HTTP_PORT: "8089"
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://datos-db:5432/datos_db
       QUARKUS_DATASOURCE_USERNAME: postgres
       QUARKUS_DATASOURCE_PASSWORD: postgres
-      QUARKUS_HTTP_PORT: "8089"
-      QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
+      DB_URL: jdbc:postgresql://datos-db:5432/datos_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
     depends_on:
       datos-db:
         condition: service_healthy
@@ -189,9 +183,9 @@ services:
 
   ms-kpis:
     build:
-      context: ms-kpis
-      dockerfile: src/main/docker/Dockerfile.jvm
-    container_name: ms_kpis
+      context: ./ms-kpis
+      dockerfile: Dockerfile
+    container_name: gf_ms_kpis
     image: grupofrontera/ms-kpis:latest
     ports:
       - "8086:8086"
@@ -200,7 +194,6 @@ services:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://kpis-db:5432/kpis_db
       QUARKUS_DATASOURCE_USERNAME: postgres
       QUARKUS_DATASOURCE_PASSWORD: postgres
-      QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: "5672"
     depends_on:
@@ -212,9 +205,9 @@ services:
 
   ms-reportes:
     build:
-      context: ms-reportes
-      dockerfile: src/main/docker/Dockerfile.jvm
-    container_name: ms_reportes
+      context: ./ms-reportes
+      dockerfile: Dockerfile
+    container_name: gf_ms_reportes
     image: grupofrontera/ms-reportes:latest
     ports:
       - "8087:8087"
@@ -229,25 +222,40 @@ services:
   bff:
     build:
       context: ./bff
-      dockerfile: src/main/docker/Dockerfile.jvm
+      dockerfile: Dockerfile
     container_name: gf_bff
     image: grupofrontera/bff:latest
     ports:
       - "8090:8090"
     environment:
-      MS_DATOS_URL: http://ms-datos:8089
+      QUARKUS_HTTP_PORT: "8090"
       MS_AUTH_URL: http://ms-auth:8088
       MS_USERS_URL: http://ms-users:8085
+      MS_DATOS_URL: http://ms-datos:8089
       MS_KPIS_URL: http://ms-kpis:8086
       MS_REPORTES_URL: http://ms-reportes:8087
-      QUARKUS_HTTP_PORT: "8090"
-      QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
     depends_on:
-      - ms-datos
       - ms-auth
       - ms-users
+      - ms-datos
       - ms-kpis
       - ms-reportes
+    restart: on-failure
+
+  # ==============================================================
+  # FRONTEND — build con Vite, servido por nginx
+  # ==============================================================
+
+  front:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    container_name: gf_front
+    image: grupofrontera/front:latest
+    ports:
+      - "5173:80"
+    depends_on:
+      - bff
     restart: on-failure
 
 volumes:

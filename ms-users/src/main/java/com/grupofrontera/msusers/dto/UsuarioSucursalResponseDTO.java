@@ -7,7 +7,7 @@ public class UsuarioSucursalResponseDTO {
     public UUID id;
     public UUID usuarioId;
     public String nombreUsuario;
-    public UUID sucursalId;
-    public String nombreSucursal;
+    // Id de la sucursal en ms-datos. El nombre lo resuelve el BFF.
+    public Long sucursalId;
     public LocalDateTime asignadoEn;
 }

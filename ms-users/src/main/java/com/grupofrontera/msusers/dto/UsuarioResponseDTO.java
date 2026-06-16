@@ -17,5 +17,6 @@ public class UsuarioResponseDTO {
     public LocalDate fechaNacimiento;
     public EstadoUsuario estado;
     public List<String> roles;
-    public List<String> sucursales;
+    // Ids de las sucursales (en ms-datos) asignadas. El BFF resuelve los nombres.
+    public List<Long> sucursalRefIds;
 }

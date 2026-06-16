@@ -13,6 +13,8 @@ public class SucursalRequestDTO {
     @NotBlank
     public String ciudad;
 
+    public Long ciudadId;
+
     public Double latitud;
 
     public Double longitud;

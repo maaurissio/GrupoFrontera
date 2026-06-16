@@ -38,6 +38,7 @@ public class SucursalResource {
         sucursal.codigo = request.codigo;
         sucursal.nombre = request.nombre;
         sucursal.ciudad = request.ciudad;
+        sucursal.ciudadId = request.ciudadId;
         sucursal.latitud = request.latitud;
         sucursal.longitud = request.longitud;
 
@@ -72,6 +73,7 @@ public class SucursalResource {
             datos.codigo = request.codigo;
             datos.nombre = request.nombre;
             datos.ciudad = request.ciudad;
+            datos.ciudadId = request.ciudadId;
             datos.latitud = request.latitud;
             datos.longitud = request.longitud;
 

@@ -18,9 +18,10 @@ public class UsuarioSucursal extends PanacheEntityBase {
     @JoinColumn(name = "usuario_id", nullable = false)
     public Usuario usuario;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "sucursal_id", nullable = false)
-    public Sucursal sucursal;
+    // Referencia logica a la sucursal que vive en ms-datos (id Long).
+    // No es FK real: cruza el limite del microservicio.
+    @Column(name = "sucursal_ref_id", nullable = false)
+    public Long sucursalRefId;
 
     @Column(nullable = false)
     public LocalDateTime asignadoEn;

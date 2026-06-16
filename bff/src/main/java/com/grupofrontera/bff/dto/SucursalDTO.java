@@ -8,6 +8,7 @@ public class SucursalDTO {
     public String codigo;
     public String nombre;
     public String ciudad;
+    public Long ciudadId;
     public Boolean habilitada;
     public Double latitud;
     public Double longitud;

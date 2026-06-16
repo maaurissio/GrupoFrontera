@@ -16,9 +16,22 @@ export interface SucursalDTO {
   codigo: string;
   nombre: string;
   ciudad: string;
+  ciudadId?: number | null;
   habilitada: boolean;
   latitud?: number | null;
   longitud?: number | null;
+}
+
+export interface RegionDTO {
+  id: number;
+  nombre: string;
+}
+
+export interface CiudadDTO {
+  id: number;
+  nombre: string;
+  regionId: number;
+  regionNombre: string;
 }
 
 export interface RespuestaKpis {
@@ -78,6 +91,7 @@ export interface SucursalCreatePayload {
   codigo: string;
   nombre: string;
   ciudad: string;
+  ciudadId?: number | null;
   latitud?: number | null;
   longitud?: number | null;
 }

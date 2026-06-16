@@ -1,7 +1,9 @@
 package com.grupofrontera.bff.resource;
 
 import com.grupofrontera.bff.client.AuthClient;
+import com.grupofrontera.bff.client.DatosClient;
 import com.grupofrontera.bff.client.UsersClient;
+import com.grupofrontera.bff.dto.SucursalDTO;
 import com.grupofrontera.bff.dto.UsuarioCreateRequest;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
@@ -14,6 +16,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,21 +36,25 @@ public class UsuarioResource {
     @RestClient
     AuthClient authClient;
 
+    @Inject
+    @RestClient
+    DatosClient datosClient;
+
     @GET
     public List<Object> listar() {
-        return usersClient.listarUsuarios();
+        return enriquecerLista(usersClient.listarUsuarios());
     }
 
     @GET
     @Path("/todos")
     public List<Object> listarTodos() {
-        return usersClient.listarTodosUsuarios();
+        return enriquecerLista(usersClient.listarTodosUsuarios());
     }
 
     @GET
     @Path("/{id}")
     public Object obtener(@PathParam("id") UUID id) {
-        return usersClient.obtenerUsuario(id);
+        return enriquecer(usersClient.obtenerUsuario(id), mapaNombresSucursal());
     }
 
     @POST
@@ -118,7 +125,61 @@ public class UsuarioResource {
 
     @POST
     @Path("/{usuarioId}/sucursales")
-    public Response asignarSucursal(@PathParam("usuarioId") UUID usuarioId, Map<String, UUID> body) {
+    public Response asignarSucursal(@PathParam("usuarioId") UUID usuarioId, Map<String, Object> body) {
         return usersClient.asignarSucursal(usuarioId, body);
+    }
+
+    // ------------------------------------------------------------------
+    // Enriquecimiento: ms-users devuelve sucursalRefIds (ids de ms-datos);
+    // aqui los resolvemos a nombres y los exponemos como `sucursales` para
+    // mantener el contrato que consume el front (UsuarioDTO.sucursales).
+    // ------------------------------------------------------------------
+
+    private Map<Long, String> mapaNombresSucursal() {
+        Map<Long, String> nombres = new HashMap<>();
+        try {
+            for (SucursalDTO s : datosClient.listarSucursales()) {
+                if (s != null && s.id != null) {
+                    nombres.put(s.id, s.nombre);
+                }
+            }
+        } catch (Exception e) {
+            // Degradado: si ms-datos no responde, devolvemos los usuarios sin
+            // nombres de sucursal en vez de fallar todo el listado.
+        }
+        return nombres;
+    }
+
+    private List<Object> enriquecerLista(List<Object> usuarios) {
+        if (usuarios == null) {
+            return usuarios;
+        }
+        Map<Long, String> nombres = mapaNombresSucursal();
+        for (Object u : usuarios) {
+            enriquecer(u, nombres);
+        }
+        return usuarios;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object enriquecer(Object usuario, Map<Long, String> nombres) {
+        if (!(usuario instanceof Map)) {
+            return usuario;
+        }
+        Map<String, Object> u = (Map<String, Object>) usuario;
+        List<String> sucursales = new ArrayList<>();
+        Object refs = u.get("sucursalRefIds");
+        if (refs instanceof List) {
+            for (Object r : (List<Object>) refs) {
+                if (r == null) {
+                    continue;
+                }
+                long id = (r instanceof Number) ? ((Number) r).longValue() : Long.parseLong(r.toString());
+                String nombre = nombres.get(id);
+                sucursales.add(nombre != null ? nombre : ("Sucursal " + id));
+            }
+        }
+        u.put("sucursales", sucursales);
+        return usuario;
     }
 }

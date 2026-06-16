@@ -38,7 +38,7 @@ public class UsuarioSucursalResource {
 
     @GET
     @Path("/sucursal/{id}")
-    public List<UsuarioSucursalResponseDTO> listarUsuariosPorSucursal(@PathParam("id") UUID id) {
+    public List<UsuarioSucursalResponseDTO> listarUsuariosPorSucursal(@PathParam("id") Long id) {
         return usuarioSucursalService.listarUsuariosPorSucursal(id);
     }
 
