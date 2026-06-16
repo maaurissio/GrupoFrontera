@@ -119,7 +119,7 @@ Conventions enforced across the codebase (mirror these when adding code):
 ## Database notes
 
 - ms-auth y ms-users usan `drop-and-create` + `import.sql` — el esquema **se destruye y recrea en cada arranque**. Solo para dev; cambiar a `update` antes de producción.
-- ms-datos usa Flyway (`migrate-at-start=true`). ms-kpis también usa Flyway.
+- ms-datos usa Flyway (`migrate-at-start=true`, `generation=none`). ms-kpis también usa Flyway. **Para cambiar el esquema de ms-datos hay que añadir una nueva migración `V#__*.sql` en `db/migration/` — no editar las existentes** (`V2__sucursal_coordenadas.sql` agregó `latitud`/`longitud` a `sucursal`).
 - Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Tests use `quarkus-junit5` + `rest-assured`.
 
 ### Credenciales semilla (ms-users import.sql)
@@ -179,7 +179,8 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | POST   | /api/bff/auth/login                | ms-auth          |
 | POST   | /api/bff/auth/refresh              | ms-auth          |
 | POST   | /api/bff/auth/logout               | ms-auth          |
-| GET    | /api/bff/usuarios                  | ms-users         |
+| GET    | /api/bff/usuarios                  | ms-users (solo ACTIVO) |
+| GET    | /api/bff/usuarios/todos            | ms-users (incl. inactivos) |
 | GET    | /api/bff/usuarios/{id}             | ms-users         |
 | POST   | /api/bff/usuarios                  | ms-users + ms-auth |
 | PUT    | /api/bff/usuarios/{id}/activar     | ms-users         |
@@ -196,10 +197,12 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 
 ### Detalles de implementación BFF
 
-- **CORS**: habilitado para `http://localhost:5173`
+- **CORS**: habilitado para `http://localhost:5173`. ⚠️ En Quarkus 3.36 la clave es `quarkus.http.cors.enabled=true` (NO `quarkus.http.cors=true`, que se ignora silenciosamente con un warning).
 - **Error propagation**: `ClientExceptionMapper` (`bff/src/main/java/com/grupofrontera/bff/exception/`) propaga códigos 4xx de los microservicios correctamente. `quarkus.rest-client.disable-default-mapper=true` en `application.properties`.
+- **Alta de usuario** (`UsuarioResource.crear`): orquesta ms-users → ms-auth. Usa `HashMap` (no `Map.of`, que lanza NPE con `fechaNacimiento=null`) y lee la entidad upstream con `Response.readEntity(...)` (no `getEntity()`, que en un cliente JAX-RS devuelve el `InputStream`). Propaga el status upstream (p. ej. 409 RUT/email duplicado).
+- **Endpoint de estado de sucursal** (`PUT /sucursales/{id}/estado`): el body espera el campo **`activo`** (booleano), no `habilitada`. Mismo contrato en ms-datos (`EstadoRequest.activo`).
 - **Sin seguridad interna**: el BFF no valida JWT — confía en que ms-auth valida. ms-users no tiene extensiones de seguridad.
-- **Dos modelos de sucursal**: `/api/bff/sucursales` apunta a ms-datos (id: `Long`). ms-users tiene sus propias sucursales (id: `UUID`) — no expuestas en BFF.
+- **Dos modelos de sucursal**: `/api/bff/sucursales` apunta a ms-datos (id: `Long`, ahora con `latitud`/`longitud`). ms-users tiene sus propias sucursales (id: `UUID`) — no expuestas en BFF.
 
 ---
 
@@ -261,19 +264,20 @@ src/
     useDebounce.ts            # debounce 350ms
   utils/
     rut.ts                    # validarRut (módulo 11), formatearRut
+    periodo.ts                # ultimosMeses(periodo, n) + tipo ChartSeries — serie de meses para gráficos
   components/
     Icon.tsx                  # wrapper de lucide-react con lookup por nombre kebab-case
     Primitives.tsx            # Badge, Delta, Button, Avatar, ColorAvatar, Switch, KpiCard, PageHead, Panel, ModalOverlay
     Sidebar.tsx               # sidebar fijo 240px — usa AuthContext para nombre/rol/iniciales
     Topbar.tsx                # barra superior sticky con búsqueda, alertas, exportar
-    Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover)
+    Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover); ChartData admite fullLabels opcional
     Login.tsx                 # login real via AuthContext, validación, manejo de errores
   views/
-    DashboardView.tsx         # KPIs reales con selector sucursal+período (obtenerKpis)
-    ReportesView.tsx          # comparativo real + export real (exportarReporte), umbrales >90/60-90/<60
+    DashboardView.tsx         # KPIs reales + gráfico dinámico (obtenerKpis de los últimos 6 meses)
+    ReportesView.tsx          # comparativo real + gráfico dinámico + export real, umbrales >90/60-90/<60
     InventoryView.tsx         # datos mock — sin endpoint BFF
-    UsersView.tsx             # CRUD real de usuarios, validación RUT, debounced search
-    BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre con coords estáticas
+    UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search
+    BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre theme-aware con coords de la API
     DatosView.tsx             # datos consolidados: filtros, reprocesar, log trazabilidad (CA-1.17–1.19)
     ReportesGuardadosView.tsx # datos mock — sin endpoint BFF
     ConfiguracionView.tsx     # perfil desde AuthContext; logout en tab Seguridad
@@ -289,15 +293,18 @@ public/
 - **Auth**: `accessToken` en estado React (memoria), `refreshToken` en `localStorage['cord_rt']`. En 401 → `client.ts` llama refresh automáticamente y reintenta.
 - **AbortController**: todos los `useEffect` de fetch crean un `AbortController` y lo cancelan al desmontar.
 - **Debounce**: `useDebounce(value, 350)` en campos de búsqueda.
-- **RUT**: `validarRut(rut, dv)` en `UsersView` antes de submit (módulo 11 chileno).
-- **Coords del mapa**: `BranchesView` tiene una tabla estática `COORDS` por nombre de sucursal — la API no provee lat/lng.
+- **Respuestas sin cuerpo**: `apiFetch` (`client.ts`) tolera 204 y 200 con body vacío (helper `parseBody`) — necesario para activar/desactivar, que devuelven 200 sin JSON.
+- **RUT**: `validarRut(rut, dv)` en `UsersView` antes de submit (módulo 11 chileno). El modal limita el RUT a 9 dígitos y el DV a un carácter `0-9`/`K`.
+- **Listado de usuarios**: `listarUsuarios()` llama a `/api/bff/usuarios/todos` (incluye inactivos) y el filtro "Solo activos" es del lado del cliente — así un usuario desactivado sigue visible y se puede reactivar.
+- **Coords del mapa**: `BranchesView` usa `latitud`/`longitud` de la sucursal (editables en el modal). Fallback: tabla estática `COORDS` por nombre → centro por defecto. El estilo del mapa (`makeMapStyle`) sigue el tema claro/oscuro escuchando el evento `prefs-changed`.
+- **Gráficos dinámicos**: Dashboard y Reportes construyen la serie del gráfico con KPIs reales de los últimos 6 meses (`ultimosMeses` en `utils/periodo.ts`); si no hay datos muestran estado vacío, no valores mock.
 
 ### Dependencias relevantes
 
 | Paquete | Uso |
 |---|---|
 | `lucide-react` | Íconos (stroke 1.75, lookup dinámico por nombre kebab-case) |
-| `maplibre-gl` | Mapa dark en BranchesView con tiles CartoCDN |
+| `maplibre-gl` | Mapa en BranchesView con tiles CartoCDN (light_all/dark_all según tema) |
 | `react-router-dom` | Instalado, no usado aún (routing por estado interno en App.tsx) |
 
 ### Design system
