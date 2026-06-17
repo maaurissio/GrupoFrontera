@@ -31,4 +31,10 @@ public interface ReportesClient {
     @GET
     @Path("/comparativo")
     Response obtenerComparativo(@QueryParam("periodo") String periodo);
+
+    @GET
+    @Path("/inventario")
+    Response exportarInventario(
+            @QueryParam("formato") String formato,
+            @QueryParam("sucursalId") Long sucursalId);
 }

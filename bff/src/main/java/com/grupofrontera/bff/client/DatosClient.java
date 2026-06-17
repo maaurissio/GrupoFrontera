@@ -1,12 +1,11 @@
 package com.grupofrontera.bff.client;
 
 import com.grupofrontera.bff.dto.CiudadDTO;
-import com.grupofrontera.bff.dto.DatoConsolidadoDTO;
-import com.grupofrontera.bff.dto.DatoConsolidadoRequestDTO;
 import com.grupofrontera.bff.dto.EstadoDTO;
 import com.grupofrontera.bff.dto.FuenteDTO;
 import com.grupofrontera.bff.dto.FuenteRequestDTO;
-import com.grupofrontera.bff.dto.LogTrazabilidadDTO;
+import com.grupofrontera.bff.dto.ProductoDTO;
+import com.grupofrontera.bff.dto.ProductoRequestDTO;
 import com.grupofrontera.bff.dto.RegionDTO;
 import com.grupofrontera.bff.dto.SucursalDTO;
 import com.grupofrontera.bff.dto.SucursalRequestDTO;
@@ -89,40 +88,36 @@ public interface DatosClient {
     @Path("/ciudades")
     Response crearCiudad(CiudadDTO request);
 
-    // Datos Consolidados
-    @POST
-    @Path("/datos")
-    Response recibirDato(DatoConsolidadoRequestDTO request);
-
+    // Productos
     @GET
-    @Path("/datos")
-    List<DatoConsolidadoDTO> consultarDatos(
+    @Path("/productos")
+    List<ProductoDTO> listarProductos(
             @QueryParam("sucursalId") Long sucursalId,
-            @QueryParam("tipoDato") String tipoDato,
-            @QueryParam("periodoDesde") String periodoDesde,
-            @QueryParam("periodoHasta") String periodoHasta,
-            @QueryParam("estado") String estado);
+            @QueryParam("categoria") String categoria,
+            @QueryParam("q") String q,
+            @QueryParam("activo") Boolean activo);
 
     @GET
-    @Path("/datos/{id}")
-    DatoConsolidadoDTO obtenerDato(@PathParam("id") Long id);
-
-    @GET
-    @Path("/datos/errores")
-    List<DatoConsolidadoDTO> listarErrores();
-
-    @GET
-    @Path("/datos/{id}/log")
-    List<LogTrazabilidadDTO> obtenerLog(@PathParam("id") Long id);
+    @Path("/productos/{id}")
+    ProductoDTO obtenerProducto(@PathParam("id") Long id);
 
     @POST
-    @Path("/datos/{id}/reprocesar")
-    DatoConsolidadoDTO reprocesar(@PathParam("id") Long id);
+    @Path("/productos")
+    Response crearProducto(ProductoRequestDTO request);
+
+    @PUT
+    @Path("/productos/{id}")
+    ProductoDTO actualizarProducto(@PathParam("id") Long id, ProductoRequestDTO request);
+
+    @PUT
+    @Path("/productos/{id}/estado")
+    ProductoDTO cambiarEstadoProducto(@PathParam("id") Long id, EstadoDTO request);
+
+    @POST
+    @Path("/productos/importar")
+    Response importarProductos(List<ProductoRequestDTO> request);
 
     @GET
-    @Path("/datos/reportes/agrupados")
-    Response reporteAgrupado(
-            @QueryParam("periodoDesde") String periodoDesde,
-            @QueryParam("periodoHasta") String periodoHasta,
-            @QueryParam("tipoAgrupacion") String tipoAgrupacion);
+    @Path("/productos/categorias")
+    List<String> listarCategorias();
 }

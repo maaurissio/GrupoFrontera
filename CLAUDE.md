@@ -14,9 +14,9 @@ Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`,
 |---------------|------------------------------|---------------------------------------------------------|
 | `ms-users`    | User/role/branch domain      | **Fully implemented** — the reference for all patterns  |
 | `ms-auth`     | Authentication & JWT         | **Fully implemented** — JWT HS384, BCrypt, refresh tokens |
-| `ms-datos`    | Data ingestion               | **Fully implemented** — Flyway, catálogo geográfico, 4 sucursales + 5000 datos semilla |
+| `ms-datos`    | Catálogo de productos        | **Fully implemented** — Flyway, catálogo geográfico, 4 sucursales + 48 productos semilla, import JSON |
 | `ms-kpis`     | KPI computation              | **Fully implemented** — Flyway, consume RabbitMQ, 96 KPIs semilla (4 suc × 12 meses) |
-| `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI) |
+| `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI): reporte de KPIs **y de inventario de productos** |
 | `bff`         | Backend-for-frontend         | **Fully implemented** — integra todos los microservicios |
 | `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 8 vistas      |
 
@@ -172,9 +172,10 @@ Conventions enforced across the codebase (mirror these when adding code):
 | `V3__region_ciudad_y_seed.sql` | catálogo `region`/`ciudad` (16 regiones, 57 ciudades) + 3 sucursales (ids 1–3) |
 | `V4__seed_datos_retail.sql` | 5 fuentes + 1000 datos consolidados (retail hogar/tecnología) + logs — **reemplazado por V6** |
 | `V5__naturalizar_montos.sql` | reescribe los montos del JSON de V4 para que no terminen en `000` |
-| `V6__rehacer_sucursales_y_5000_datos.sql` | **reemplaza las 3 sucursales por 4** (ids 1–4: Don Raucho/Angol, Jurel San Jose/Coronel, Hogar Central/Santiago, TecnoSur/Puerto Montt) y **regenera 5000 datos** con valores naturales (no terminados en 000) |
+| `V6__rehacer_sucursales_y_5000_datos.sql` | **reemplaza las 3 sucursales por 4** (ids 1–4: Don Raucho/Angol, Jurel San Jose/Coronel, Hogar Central/Santiago, TecnoSur/Puerto Montt) y **regenera 5000 datos** con valores naturales (no terminados en 000) — **eliminados por V7** |
+| `V7__productos_y_drop_datos.sql` | **elimina las tablas `dato_consolidado` y `log_trazabilidad`** (los 5000 datos) y crea la tabla **`producto`** (`codigo`, `nombre`, `sucursal_id` FK real, `categoria` enum, `stock`, `stock_minimo`, `precio`, `fecha_actualizacion_stock`, `activo`; UNIQUE `(codigo, sucursal_id)`) + **48 productos semilla** (12 por sucursal × las 8 categorías, precios naturales, algunos bajo mínimo) |
 
-- **V4** genera 1000 filas con aritmética determinista, repartidas en 5 `tipo_dato`: `VENTA` (30%), `INVENTARIO` (30%), `AJUSTE_INVENTARIO` (20%), `DEVOLUCCION` (10%), `TRANSFERENCIA` (10%); 12 meses (jul-2025 → jun-2026); estados PROCESADO/VALIDADO/RECIBIDO/ERROR. El campo `valor` es **JSON** (texto) con forma distinta por tipo — el front lo parsea en `DatosView` (`parseValor`).
+> **Dominio Producto (V7 en adelante).** El antiguo dominio "datos consolidados" (entidad `DatoConsolidado`, `LogTrazabilidad`, enum `EstadoDato`, sus DTOs/resource/service) fue **eliminado**. ms-datos ahora expone **`/api/v1/productos`** (CRUD + filtros `sucursalId`/`categoria`/`q`/`activo`, `POST /importar` insert-only, `GET /categorias`). `Fuente`/`Sucursal`/`Region`/`Ciudad` se mantienen sin cambios. La categoría es un enum: `ELECTRODOMESTICO, TV, MOVIL, CONSOLA, COMPUTACION, AUDIO, ACCESORIO, OTRO`.
 
 #### Migraciones y datos semilla de ms-kpis (`db/migration/`)
 
@@ -259,9 +260,15 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | PUT    | /api/bff/sucursales/{id}/estado    | ms-datos         |
 | GET    | /api/bff/kpis                      | ms-kpis          |
 | GET    | /api/bff/kpis/comparativo          | ms-kpis          |
-| GET    | /api/bff/datos                     | ms-datos         |
-| POST   | /api/bff/datos/{id}/reprocesar     | ms-datos         |
-| GET    | /api/bff/reportes/exportar         | ms-reportes      |
+| GET    | /api/bff/productos                 | ms-datos (filtros: sucursalId, categoria, q, activo) |
+| GET    | /api/bff/productos/{id}            | ms-datos         |
+| POST   | /api/bff/productos                 | ms-datos (201; 409 si código duplicado en la sucursal) |
+| PUT    | /api/bff/productos/{id}            | ms-datos         |
+| PUT    | /api/bff/productos/{id}/estado     | ms-datos (soft delete, body `{activo}`) |
+| POST   | /api/bff/productos/importar        | ms-datos (importa lista JSON, **insert-only**) |
+| GET    | /api/bff/productos/categorias      | ms-datos (valores del enum) |
+| GET    | /api/bff/reportes/exportar         | ms-reportes (KPIs) |
+| GET    | /api/bff/reportes/inventario       | ms-reportes (inventario de productos) |
 
 > **Export de reportes** (`/reportes/exportar?formato=pdf\|xlsx&periodo=YYYY-MM[&sucursalId=N]`):
 > - **Con `sucursalId`** → reporte individual de esa sucursal.
@@ -270,6 +277,11 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 > - ms-reportes resuelve los **nombres de sucursal** vía un cliente REST a ms-datos (`datos-api`,
 >   config `quarkus.rest-client.datos-api.url`); si ms-datos no responde, cae a "Sucursal {id}".
 > - 404 si no hay KPIs (individual: esa sucursal/período; consolidado: ningún dato en el período).
+
+> **Export de inventario** (`/reportes/inventario?formato=pdf\|xlsx[&sucursalId=N]`):
+> - **Con `sucursalId`** → inventario de esa sucursal (tabla código·nombre·categoría·stock·mínimo·precio·valorizado + fila TOTAL).
+> - **Sin `sucursalId`** → **consolidado** agrupado por sucursal con subtotal por grupo + TOTAL GENERAL (valorizado = Σ stock·precio).
+> - ms-reportes consume los productos vía cliente REST a ms-datos (`datos-api`, `GET /api/v1/productos?sucursalId=`). 404 si no hay productos.
 
 ### Detalles de implementación BFF
 
@@ -310,7 +322,7 @@ VALUES (1, '2026-07', 15847263, 421, 37642.00, 18000000, 88.04, NOW());
 
 **Dev server**: `npm run dev` desde `front/` → `http://localhost:5173`
 
-**Estado**: conectado al BFF. Ya no usa datos mock para auth, usuarios, sucursales, KPIs, datos consolidados ni reportes. Los datos mock restantes en `src/data.ts` corresponden a secciones sin endpoint BFF aún (inventario, reportes guardados, log de auditoría, sesiones, integraciones).
+**Estado**: conectado al BFF. Ya no usa datos mock para auth, usuarios, sucursales, KPIs, productos ni reportes. Los datos mock restantes en `src/data.ts` corresponden a secciones sin endpoint BFF aún (reportes guardados, log de auditoría, sesiones, integraciones).
 
 ### Comandos
 
@@ -330,14 +342,14 @@ src/
   index.css                   # importa tokens.css + kit.css + maplibre-gl.css
   data.ts                     # mocks residuales: inventario, reportesGuardados, auditLog, etc.
   api/
-    types.ts                  # interfaces TS: UsuarioDTO, SucursalDTO, RespuestaKpis, DatoConsolidadoDTO, etc.
+    types.ts                  # interfaces TS: UsuarioDTO, SucursalDTO, RespuestaKpis, ProductoDTO, CategoriaProducto/CATEGORIAS, ImportResultado, etc.
     client.ts                 # fetch wrapper: Authorization header, auto-refresh en 401, AbortSignal
     auth.ts                   # loginApi, logoutApi, refreshApi
     usuarios.ts               # listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario
     sucursales.ts             # listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal
     kpis.ts                   # obtenerKpis, obtenerComparativo
     reportes.ts               # exportarReporte → blob download
-    datos.ts                  # listarDatos, reprocesarDato, logDato
+    productos.ts              # listarProductos, crearProducto, actualizarProducto, cambiarEstadoProducto, importarProductos
   context/
     AuthContext.tsx            # JWT en memoria, refreshToken en localStorage 'cord_rt', auto-restore al montar
     PrefsContext.tsx           # tema claro/oscuro + densidad, persiste en localStorage
@@ -354,12 +366,12 @@ src/
     Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover); ChartData admite fullLabels opcional
     Login.tsx                 # login real via AuthContext, validación, manejo de errores
   views/
-    DashboardView.tsx         # KPIs reales + gráfico dinámico (obtenerKpis de los últimos 6 meses)
+    DashboardView.tsx         # KPIs reales: selector "Todas las sucursales"/individual + alcance "Mes"/"Todos los meses" (agrega vía obtenerComparativo) + gráfico dinámico de 6 meses
     ReportesView.tsx          # comparativo real + gráfico dinámico + export real, umbrales >90/60-90/<60
     InventoryView.tsx         # datos mock — sin endpoint BFF
     UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search. Modal "Asignar sucursales" (AssignBranchesModal): toggle por sucursal → POST/DELETE asignación, enriquecido con nombres.
     BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre theme-aware con coords de la API. Botón "Cómo llegar" en BranchMap: geolocalización del navegador → ruta OSRM (router.project-osrm.org) dibujada como capa GeoJSON, con fallback a línea recta (haversine) si OSRM falla. La ruta se limpia al cambiar de sucursal y se re-pinta tras cambio de tema.
-    DatosView.tsx             # datos consolidados: filtros (sucursal/tipo/período/estado), reprocesar, log trazabilidad (CA-1.17–1.19). El campo `valor` es JSON y se muestra parseado por tipo (parseValor). Tipo y estado son <select>; el período usa dos <input type="month"> enlazados (min/max) + chips de rango rápido (3/6/12 meses, aplican al instante) y etiqueta legible del rango.
+    ProductosView.tsx         # catálogo de productos (ms-datos): filtros sucursal/categoría/búsqueda (debounced); tabla código·nombre·categoría·sucursal·stock (resaltado si < mínimo)·precio·actualizado; botón "Importar JSON" (insert-only, muestra insertados/rechazados); "Nuevo producto" (modal); export PDF/Excel de inventario.
     ReportesGuardadosView.tsx # datos mock — sin endpoint BFF
     ConfiguracionView.tsx     # perfil desde AuthContext; logout en tab Seguridad
 public/

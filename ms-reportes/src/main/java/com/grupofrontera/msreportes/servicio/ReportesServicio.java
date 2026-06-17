@@ -2,10 +2,12 @@ package com.grupofrontera.msreportes.servicio;
 
 import com.grupofrontera.msreportes.cliente.ClienteDatos;
 import com.grupofrontera.msreportes.cliente.ClienteKpis;
+import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
 import com.grupofrontera.msreportes.dto.RespuestaKpisDto;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -47,6 +49,30 @@ public class ReportesServicio {
             LOG.warnf("No se pudieron obtener nombres de sucursal desde ms-datos: %s", e.getMessage());
             return Map.of();
         }
+    }
+
+    /**
+     * Trae los productos (filtrados por sucursal o todos) para el reporte de inventario.
+     * Enriquce cada producto con el nombre de su sucursal (vía obtenerNombresSucursales)
+     * para permitir agrupar por sucursal en el consolidado.
+     * Lanza 404 (NotFoundException) si no hay productos.
+     */
+    public List<ProductoDto> obtenerInventario(Long sucursalId) {
+        LOG.infof("Consultando inventario: sucursalId=%s", sucursalId);
+        List<ProductoDto> productos = clienteDatos.listarProductos(sucursalId);
+
+        if (productos == null || productos.isEmpty()) {
+            String alcance = sucursalId != null ? "la sucursal " + sucursalId : "ninguna sucursal";
+            throw new NotFoundException("No hay productos para " + alcance);
+        }
+
+        Map<Long, String> nombres = obtenerNombresSucursales();
+        for (ProductoDto p : productos) {
+            if (p.sucursalNombre == null || p.sucursalNombre.isBlank()) {
+                p.sucursalNombre = nombres.getOrDefault(p.sucursalId, "Sucursal " + p.sucursalId);
+            }
+        }
+        return productos;
     }
 
     public ReporteDashboard obtenerDashboard(Long sucursalId, String periodo) {
