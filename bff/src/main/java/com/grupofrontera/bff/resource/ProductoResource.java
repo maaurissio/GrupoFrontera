@@ -4,6 +4,7 @@ import com.grupofrontera.bff.client.DatosClient;
 import com.grupofrontera.bff.dto.EstadoDTO;
 import com.grupofrontera.bff.dto.ProductoDTO;
 import com.grupofrontera.bff.dto.ProductoRequestDTO;
+import com.grupofrontera.bff.dto.StockAjusteDTO;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
@@ -64,6 +65,12 @@ public class ProductoResource {
     @Path("/{id}/estado")
     public ProductoDTO cambiarEstado(@PathParam("id") Long id, @Valid EstadoDTO request) {
         return datosClient.cambiarEstadoProducto(id, request);
+    }
+
+    @PUT
+    @Path("/{id}/stock")
+    public ProductoDTO ajustarStock(@PathParam("id") Long id, @Valid StockAjusteDTO request) {
+        return datosClient.ajustarStockProducto(id, request);
     }
 
     @POST

@@ -43,6 +43,13 @@ export function cambiarEstadoProducto(id: number, activo: boolean): Promise<Prod
   });
 }
 
+export function ajustarStockProducto(id: number, delta: number): Promise<ProductoDTO> {
+  return apiFetch<ProductoDTO>(`/api/bff/productos/${id}/stock`, {
+    method: 'PUT',
+    body: JSON.stringify({ delta }),
+  });
+}
+
 export function importarProductos(items: ProductoCreatePayload[]): Promise<ImportResultado> {
   return apiFetch<ImportResultado>('/api/bff/productos/importar', {
     method: 'POST',

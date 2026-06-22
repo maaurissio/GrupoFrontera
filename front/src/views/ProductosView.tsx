@@ -3,7 +3,7 @@ import { Icon } from '../components/Icon';
 import { Badge, Panel, ModalOverlay } from '../components/Primitives';
 import { useDebounce } from '../hooks/useDebounce';
 import { listarSucursales } from '../api/sucursales';
-import { listarProductos, crearProducto, importarProductos } from '../api/productos';
+import { listarProductos, crearProducto, importarProductos, ajustarStockProducto } from '../api/productos';
 import { exportarInventario } from '../api/reportes';
 import { CATEGORIAS } from '../api/types';
 import type {
@@ -173,6 +173,84 @@ function NuevoProductoModal({
   );
 }
 
+function AjustarStockModal({
+  producto, onClose, onAjustado,
+}: {
+  producto: ProductoDTO;
+  onClose: () => void;
+  onAjustado: (p: ProductoDTO) => void;
+}) {
+  const [cantidad, setCantidad] = useState('');
+  const [saving, setSaving] = useState<'add' | 'sub' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const cantidadNum = Number(cantidad);
+  const valid = cantidad.trim() !== '' && Number.isInteger(cantidadNum) && cantidadNum > 0;
+
+  async function aplicar(signo: 1 | -1) {
+    if (!valid) return;
+    setSaving(signo === 1 ? 'add' : 'sub');
+    setError(null);
+    try {
+      const actualizado = await ajustarStockProducto(producto.id, signo * cantidadNum);
+      onAjustado(actualizado);
+      onClose();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      setError(
+        status === 400
+          ? 'El stock no puede quedar negativo.'
+          : 'No se pudo ajustar el stock. Intenta nuevamente.',
+      );
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card" style={{ width: 380, maxWidth: '92vw', padding: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--bg-border)' }}>
+          <span className="ds-h3">Ajustar stock</span>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button>
+        </div>
+        <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{producto.nombre}</div>
+            <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>
+              Stock actual: <span className="ds-mono">{producto.stock.toLocaleString('es-CL')}</span>
+            </div>
+          </div>
+          <div className="field">
+            <label className="field-label">Cantidad</label>
+            <input
+              className="input" type="number" min={1} value={cantidad}
+              onChange={e => setCantidad(e.target.value)}
+              placeholder="0"
+              style={{ height: 34 }}
+            />
+          </div>
+          {error && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-danger)' }}>
+              <Icon name="alert-circle" size={16} />
+              <span className="ds-sm">{error}</span>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 18px', borderTop: '1px solid var(--bg-border)' }}>
+          <button className="btn btn-ghost btn-sm" style={{ height: 34 }} onClick={onClose}>Cancelar</button>
+          <button className="btn btn-danger btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }} disabled={!valid || !!saving} onClick={() => aplicar(-1)}>
+            {saving === 'sub' ? <><Icon name="loader" size={14} />Restando…</> : <><Icon name="minus" size={14} />Restar</>}
+          </button>
+          <button className="btn btn-primary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }} disabled={!valid || !!saving} onClick={() => aplicar(1)}>
+            {saving === 'add' ? <><Icon name="loader" size={14} />Agregando…</> : <><Icon name="plus" size={14} />Agregar</>}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
 export function ProductosView() {
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
   const [productos, setProductos] = useState<ProductoDTO[]>([]);
@@ -184,6 +262,7 @@ export function ProductosView() {
   const q = useDebounce(busqueda, 350);
 
   const [showNuevo, setShowNuevo] = useState(false);
+  const [ajustando, setAjustando] = useState<ProductoDTO | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -218,6 +297,10 @@ export function ProductosView() {
 
   function clearFiltros() {
     setSucursalId(''); setCategoria(''); setBusqueda('');
+  }
+
+  function onStockAjustado(actualizado: ProductoDTO) {
+    setProductos(prev => prev.map(p => (p.id === actualizado.id ? actualizado : p)));
   }
 
   async function doExport(fmt: 'pdf' | 'xlsx') {
@@ -392,6 +475,7 @@ export function ProductosView() {
                   <th style={{ textAlign: 'right' }}>Stock</th>
                   <th style={{ textAlign: 'right' }}>Precio</th>
                   <th>Actualizado</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -410,6 +494,11 @@ export function ProductosView() {
                       </td>
                       <td className="num">{fmtClp(p.precio)}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{formatDate(p.fechaActualizacionStock)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn btn-ghost btn-sm" style={{ height: 28, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => setAjustando(p)}>
+                          <Icon name="package" size={13} />Ajustar stock
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -430,6 +519,14 @@ export function ProductosView() {
           sucursales={sucursales}
           onClose={() => setShowNuevo(false)}
           onCreated={() => fetchProductos(sucursalId, categoria, q)}
+        />
+      )}
+
+      {ajustando && (
+        <AjustarStockModal
+          producto={ajustando}
+          onClose={() => setAjustando(null)}
+          onAjustado={onStockAjustado}
         />
       )}
     </div>

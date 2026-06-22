@@ -14,6 +14,10 @@ public class CredencialRepository implements PanacheRepositoryBase<Credencial, U
         return find("email", email).firstResultOptional();
     }
 
+    public Optional<Credencial> findByUsuarioRefId(UUID usuarioRefId) {
+        return find("usuarioRefId", usuarioRefId).firstResultOptional();
+    }
+
     public boolean existePorEmail(String email) {
         return count("email", email) > 0;
     }

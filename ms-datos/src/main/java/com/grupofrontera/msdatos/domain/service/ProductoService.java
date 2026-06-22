@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import org.hibernate.Hibernate;
 
 @ApplicationScoped
 public class ProductoService {
@@ -120,6 +121,31 @@ public class ProductoService {
     }
 
     @Transactional
+    public Producto ajustarStock(Long id, Integer delta) {
+        Producto producto = Producto.findById(id);
+        if (producto == null) {
+            throw new IllegalArgumentException("Producto no encontrado con id: " + id);
+        }
+
+        int nuevoStock = producto.stock + delta;
+        if (nuevoStock < 0) {
+            throw new WebApplicationException(
+                    "El stock no puede quedar negativo (actual: " + producto.stock + ", delta: " + delta + ")",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        producto.stock = nuevoStock;
+        producto.fechaActualizacionStock = LocalDateTime.now();
+        producto.persist();
+
+        // Inicializa la asociacion lazy con Sucursal mientras la transaccion (y la sesion)
+        // sigue abierta; ProductoResponse.fromEntity la lee despues, ya fuera de la transaccion.
+        Hibernate.initialize(producto.sucursal);
+
+        return producto;
+    }
+
+    @Transactional
     public Producto cambiarEstado(Long id, boolean activo) {
         Producto producto = Producto.findById(id);
         if (producto == null) {
@@ -127,6 +153,7 @@ public class ProductoService {
         }
         producto.activo = activo;
         producto.persist();
+        Hibernate.initialize(producto.sucursal);
         return producto;
     }
 

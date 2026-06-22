@@ -7,6 +7,7 @@ import com.grupofrontera.bff.dto.FuenteRequestDTO;
 import com.grupofrontera.bff.dto.ProductoDTO;
 import com.grupofrontera.bff.dto.ProductoRequestDTO;
 import com.grupofrontera.bff.dto.RegionDTO;
+import com.grupofrontera.bff.dto.StockAjusteDTO;
 import com.grupofrontera.bff.dto.SucursalDTO;
 import com.grupofrontera.bff.dto.SucursalRequestDTO;
 import jakarta.ws.rs.Consumes;
@@ -112,6 +113,10 @@ public interface DatosClient {
     @PUT
     @Path("/productos/{id}/estado")
     ProductoDTO cambiarEstadoProducto(@PathParam("id") Long id, EstadoDTO request);
+
+    @PUT
+    @Path("/productos/{id}/stock")
+    ProductoDTO ajustarStockProducto(@PathParam("id") Long id, StockAjusteDTO request);
 
     @POST
     @Path("/productos/importar")

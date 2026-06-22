@@ -4,6 +4,7 @@ import com.grupofrontera.msdatos.api.dto.EstadoRequest;
 import com.grupofrontera.msdatos.api.dto.ImportResultadoResponse;
 import com.grupofrontera.msdatos.api.dto.ProductoRequest;
 import com.grupofrontera.msdatos.api.dto.ProductoResponse;
+import com.grupofrontera.msdatos.api.dto.StockAjusteRequest;
 import com.grupofrontera.msdatos.domain.entity.CategoriaProducto;
 import com.grupofrontera.msdatos.domain.entity.Producto;
 import com.grupofrontera.msdatos.domain.service.ProductoService;
@@ -86,6 +87,19 @@ public class ProductoResource {
     public Response cambiarEstado(@PathParam("id") Long id, @Valid EstadoRequest request) {
         try {
             Producto producto = productoService.cambiarEstado(id, request.activo);
+            return Response.ok(ProductoResponse.fromEntity(producto)).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(e.getMessage())
+                    .build();
+        }
+    }
+
+    @PUT
+    @Path("/{id}/stock")
+    public Response ajustarStock(@PathParam("id") Long id, @Valid StockAjusteRequest request) {
+        try {
+            Producto producto = productoService.ajustarStock(id, request.delta);
             return Response.ok(ProductoResponse.fromEntity(producto)).build();
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.NOT_FOUND)
