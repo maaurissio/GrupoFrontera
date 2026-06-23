@@ -213,15 +213,16 @@ Además de los smoke tests `@QuarkusTest` preexistentes (`AuthResourceTest`, `Us
 | `ms-auth`  | `AuthServiceTest` (16 tests) | `registrar`, `login`, `refresh` (rotación de refresh token), `logout`, `cambiarEstado`, `validate` |
 | `ms-users` | `UsuarioServiceTest` (7), `RolServiceTest` (3), `UsuarioRolServiceTest` (3), `UsuarioSucursalServiceTest` (4) | CRUD, duplicados → 409, no-encontrado → 404, asignaciones usuario↔rol/sucursal |
 
-Ambos `pom.xml` tienen `jacoco-maven-plugin` (0.8.12) con el goal `report` ligado a la fase `test` — corre solo, sin pasos extra. Cada microservicio tiene además un `package.json` mínimo:
+`maven-surefire-plugin` excluye `**/*ResourceTest.java` por defecto (propiedad `surefire.excludes`, ver `pom.xml`), así que `npm run test` / `mvnw test` corren **solo** los `*ServiceTest` de Mockito — no necesitan BD. Ambos `pom.xml` tienen además `jacoco-maven-plugin` (0.8.12) con el goal `report` ligado a la fase `test`, que ahora siempre se alcanza (Surefire ya no falla por falta de BD). Cada microservicio tiene además un `package.json` mínimo:
 
 ```powershell
-npm run test              # = mvnw test → TODA la suite + reporte JaCoCo en target/site/jacoco/index.html
-.\mvnw.cmd test -Dtest=AuthServiceTest                                                        # ms-auth: solo el unit test, sin BD
+npm run test                       # = mvnw test → solo *ServiceTest + reporte JaCoCo en target/site/jacoco/index.html, sin BD
+.\mvnw.cmd test -Dtest=AuthServiceTest                                                        # ms-auth: un test puntual, sin BD
 .\mvnw.cmd test -Dtest=UsuarioServiceTest,RolServiceTest,UsuarioRolServiceTest,UsuarioSucursalServiceTest  # ms-users: idem
+.\mvnw.cmd test -Pdb-tests                                                                     # corre TODO, incluidos los smoke tests *ResourceTest — requiere BD real arriba
 ```
 
-> **`npm run test` corre todo, incluidos los smoke tests viejos.** Si la BD no está levantada, esos smoke tests fallan con `JDBCConnectionException` y Maven aborta el build *antes* de llegar al goal `jacoco:report` (no se genera el reporte). Con la BD arriba (`docker compose up -d` o `mvnw quarkus:dev`), todo pasa en verde y el reporte queda listo en el mismo paso — éste es el flujo esperado en desarrollo normal.
+> Los smoke tests `*ResourceTest`/`*ResourceIT` (`AuthResourceTest`, `UsersResourceTest`) no se eliminaron — siguen teniendo valor para verificación manual/CI con BD real — pero ya no corren en el flujo por defecto. Usa el perfil `-Pdb-tests` (o `-Dtest=NombreDeLaClase` puntual) cuando quieras ejecutarlos, con `docker compose up -d` o `mvnw quarkus:dev` levantando la BD primero.
 
 ### front — Vitest + React Testing Library
 

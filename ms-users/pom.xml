@@ -14,8 +14,9 @@
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.36.0</quarkus.platform.version>
         <skipITs>true</skipITs>
+        <surefire.excludes>**/*ResourceTest.java</surefire.excludes>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
-        <jacoco-plugin.version>0.8.12</jacoco-plugin.version>
+        <jacoco-plugin.version>0.8.14</jacoco-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -105,6 +106,9 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
                 <configuration>
+                    <excludes>
+                        <exclude>${surefire.excludes}</exclude>
+                    </excludes>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
@@ -164,6 +168,12 @@
             <properties>
                 <skipITs>false</skipITs>
                 <quarkus.native.enabled>true</quarkus.native.enabled>
+            </properties>
+        </profile>
+        <profile>
+            <id>db-tests</id>
+            <properties>
+                <surefire.excludes>NONE</surefire.excludes>
             </properties>
         </profile>
     </profiles>
