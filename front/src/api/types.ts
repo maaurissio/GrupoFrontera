@@ -57,27 +57,57 @@ export interface RespuestaKpis {
   diasSinReposicion: number;
 }
 
-export interface DatoConsolidadoDTO {
+// ---- Productos (catálogo / inventario de ms-datos) ----
+export type CategoriaProducto =
+  | 'ELECTRODOMESTICO' | 'TV' | 'MOVIL' | 'CONSOLA'
+  | 'COMPUTACION' | 'AUDIO' | 'ACCESORIO' | 'OTRO';
+
+export const CATEGORIAS: { value: CategoriaProducto; label: string }[] = [
+  { value: 'ELECTRODOMESTICO', label: 'Electrodoméstico' },
+  { value: 'TV', label: 'TV' },
+  { value: 'MOVIL', label: 'Móvil' },
+  { value: 'CONSOLA', label: 'Consola' },
+  { value: 'COMPUTACION', label: 'Computación' },
+  { value: 'AUDIO', label: 'Audio' },
+  { value: 'ACCESORIO', label: 'Accesorio' },
+  { value: 'OTRO', label: 'Otro' },
+];
+
+// ProductoResponse del contrato de cable.
+export interface ProductoDTO {
   id: number;
-  fuenteId: number;
-  fuenteCodigo: string;
-  fuenteNombre: string;
+  codigo: string;
+  nombre: string;
   sucursalId: number;
   sucursalCodigo: string;
   sucursalNombre: string;
-  tipoDato: string;
-  periodo: string;
-  valor: string;
-  estado: 'RECIBIDO' | 'VALIDADO' | 'PROCESADO' | 'ERROR';
+  categoria: string;
+  stock: number;
+  stockMinimo: number;
+  precio: number;
+  descripcion: string | null;
+  activo: boolean;
+  fechaActualizacionStock: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 
-export interface LogTrazabilidadDTO {
-  id: number;
-  accion: string;
-  detalle: string;
-  createdAt: string;
+// ProductoRequest del contrato de cable (crear/actualizar/ítem de importación).
+export interface ProductoCreatePayload {
+  codigo: string;
+  nombre: string;
+  sucursalId: number;
+  categoria: string;
+  stock: number;
+  stockMinimo: number;
+  precio: number;
+  descripcion: string | null;
+}
+
+export interface ImportResultado {
+  total: number;
+  insertados: number;
+  rechazados: { codigo: string; sucursalId: number; motivo: string }[];
 }
 
 export interface LoginResponse {

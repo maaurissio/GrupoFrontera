@@ -103,13 +103,34 @@ public class UsuarioResource {
     @PUT
     @Path("/{id}/activar")
     public Response activar(@PathParam("id") UUID id) {
-        return usersClient.activarUsuario(id);
+        Response response = usersClient.activarUsuario(id);
+        if (response.getStatus() < 300) {
+            sincronizarCredencial(id, true);
+        }
+        return response;
     }
 
     @PUT
     @Path("/{id}/desactivar")
     public Response desactivar(@PathParam("id") UUID id) {
-        return usersClient.desactivarUsuario(id);
+        Response response = usersClient.desactivarUsuario(id);
+        if (response.getStatus() < 300) {
+            sincronizarCredencial(id, false);
+        }
+        return response;
+    }
+
+    // Mantiene credencial.activo (ms-auth) en sincronia con Usuario.estado (ms-users):
+    // sin esto, un usuario desactivado seguiria pudiendo iniciar sesion.
+    private void sincronizarCredencial(UUID usuarioId, boolean activo) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("activo", activo);
+        try (Response r = authClient.cambiarEstadoCredencial(usuarioId, payload)) {
+            // Degradado: si ms-auth no responde o no tiene credencial para este usuario,
+            // no bloqueamos la activacion/desactivacion ya aplicada en ms-users.
+        } catch (Exception e) {
+            // ignorado a proposito
+        }
     }
 
     @POST

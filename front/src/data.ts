@@ -29,10 +29,10 @@ export const DATA = {
   nav: [
     { id: "dashboard",  label: "Resumen",   icon: "layout-dashboard" },
     { id: "reportes",   label: "Reportes",  icon: "bar-chart-3" },
-    { id: "datos",      label: "Datos",     icon: "database",   badge: 0 },
+    { id: "productos",  label: "Productos", icon: "package",    badge: 0 },
     { id: "usuarios",   label: "Usuarios",  icon: "users" },
     { id: "sucursales", label: "Sucursales", icon: "map-pin" },
   ],
 };
 
-export type ViewId = "dashboard" | "reportes" | "usuarios" | "sucursales" | "configuracion" | "datos";
+export type ViewId = "dashboard" | "reportes" | "usuarios" | "sucursales" | "configuracion" | "productos";

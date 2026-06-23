@@ -9,7 +9,7 @@ import { ReportesView } from './views/ReportesView';
 import { UsersView } from './views/UsersView';
 import { BranchesView } from './views/BranchesView';
 import { ConfiguracionView } from './views/ConfiguracionView';
-import { DatosView } from './views/DatosView';
+import { ProductosView } from './views/ProductosView';
 import type { ViewId } from './data';
 
 const TITLES: Record<ViewId, string> = {
@@ -18,7 +18,7 @@ const TITLES: Record<ViewId, string> = {
   usuarios:      'Usuarios',
   sucursales:    'Sucursales',
   configuracion: 'Configuración',
-  datos:         'Datos consolidados',
+  productos:     'Catálogo de productos',
 };
 
 const SUBTITLES: Record<ViewId, string> = {
@@ -27,7 +27,7 @@ const SUBTITLES: Record<ViewId, string> = {
   usuarios:      'Roles, sucursales y estado de cuentas',
   sucursales:    'Red de sucursales · ubicación y cobertura',
   configuracion: 'Preferencias del sistema y tu cuenta',
-  datos:         'Ingesta, validación y trazabilidad de datos',
+  productos:     'Inventario por sucursal · stock y precios',
 };
 
 function AppShell() {
@@ -48,7 +48,7 @@ function AppShell() {
       case 'usuarios':      return <UsersView />;
       case 'sucursales':    return <BranchesView />;
       case 'configuracion': return <ConfiguracionView />;
-      case 'datos':         return <DatosView />;
+      case 'productos':     return <ProductosView />;
       default:              return <DashboardView onNavigate={navigate} />;
     }
   };
@@ -57,7 +57,7 @@ function AppShell() {
     if (view === 'usuarios') return null;
     if (view === 'sucursales') return <Button variant="secondary" icon="map">Ver todas en el mapa</Button>;
     if (view === 'reportes') return null;
-    if (view === 'datos') return null;
+    if (view === 'productos') return null;
     return (
       <>
         <Button variant="secondary" icon="filter">Filtros</Button>

@@ -5,8 +5,7 @@ import { LineChart } from '../components/Chart';
 import { DATA } from '../data';
 import type { ViewId } from '../data';
 import { listarSucursales } from '../api/sucursales';
-import { obtenerKpis } from '../api/kpis';
-import { ApiError } from '../api/types';
+import { obtenerComparativo } from '../api/kpis';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
 import { ultimosMeses, type ChartSeries } from '../utils/periodo';
 
@@ -34,24 +33,50 @@ interface KpiCard {
   desc: string;
 }
 
-function kpisFromResponse(kpi: RespuestaKpis): KpiCard[] {
-  const pct = Number(kpi.porcentajeCumplimiento);
+// Agrega un conjunto de filas (una o varias sucursales) en un solo set de KPIs.
+interface Agregado {
+  totalVentas: number;
+  transacciones: number;
+  ticketPromedio: number;
+  metaMensual: number;
+  porcentajeCumplimiento: number;
+  productosBajoMinimo: number;
+  hay: boolean;
+}
+
+function agregar(rows: RespuestaKpis[]): Agregado {
+  const totalVentas = rows.reduce((s, r) => s + Number(r.totalVentas), 0);
+  const transacciones = rows.reduce((s, r) => s + Number(r.cantidadTransacciones), 0);
+  const metaMensual = rows.reduce((s, r) => s + Number(r.metaMensual), 0);
+  const productosBajoMinimo = rows.reduce((s, r) => s + Number(r.productosBajoMinimo), 0);
+  return {
+    totalVentas,
+    transacciones,
+    ticketPromedio: transacciones > 0 ? totalVentas / transacciones : 0,
+    metaMensual,
+    porcentajeCumplimiento: metaMensual > 0 ? (totalVentas / metaMensual) * 100 : 0,
+    productosBajoMinimo,
+    hay: rows.length > 0,
+  };
+}
+
+function kpisFromAgregado(a: Agregado): KpiCard[] {
+  const pct = a.porcentajeCumplimiento;
   return [
     {
-      id: 'ventas', label: 'Ventas del mes', value: fmtClp(Number(kpi.totalVentas)),
-      icon: 'dollar-sign', accent: 'info', sub: `Meta: ${fmtClp(Number(kpi.metaMensual))}`,
-      desc: 'Monto total facturado en el mes en curso.',
+      id: 'ventas', label: 'Ventas totales', value: fmtClp(a.totalVentas),
+      icon: 'dollar-sign', accent: 'info', sub: `Meta: ${fmtClp(a.metaMensual)}`,
+      desc: 'Monto total facturado en el alcance seleccionado.',
     },
     {
-      id: 'tx', label: 'Transacciones', value: kpi.cantidadTransacciones.toLocaleString('es-CL'),
+      id: 'tx', label: 'Transacciones', value: a.transacciones.toLocaleString('es-CL'),
       icon: 'shopping-cart', accent: 'neutral',
-      desc: 'Cantidad de ventas registradas en el período.',
+      desc: 'Cantidad de ventas registradas en el alcance seleccionado.',
     },
     {
-      id: 'minimo', label: 'Bajo mínimo', value: String(kpi.productosBajoMinimo),
-      icon: 'alert-triangle', accent: kpi.productosBajoMinimo > 0 ? 'warning' : 'success',
-      badge: kpi.productosBajoMinimo > 0 ? { text: 'Requiere atención', kind: 'warning' } : undefined,
-      desc: 'SKU con stock por debajo del mínimo configurado.',
+      id: 'ticket', label: 'Ticket promedio', value: fmtClp(a.ticketPromedio),
+      icon: 'receipt', accent: 'neutral',
+      desc: 'Ventas dividido por número de transacciones.',
     },
     {
       id: 'meta', label: '% Cumplimiento meta', value: `${pct.toFixed(1)}%`,
@@ -59,7 +84,7 @@ function kpisFromResponse(kpi: RespuestaKpis): KpiCard[] {
       badge: pct < 60 ? { text: 'Por debajo de meta', kind: 'danger' }
            : pct < 90 ? { text: 'En progreso', kind: 'warning' }
            : { text: 'Meta alcanzada', kind: 'success' },
-      desc: 'Porcentaje de la meta mensual de ventas alcanzada.',
+      desc: 'Ventas acumuladas sobre la meta acumulada.',
     },
   ];
 }
@@ -110,54 +135,84 @@ function KpiSkeleton() {
   );
 }
 
+type Scope = 'mes' | 'todos';
+type Status = 'idle' | 'loading' | 'error' | 'nodata';
+
 export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void }) {
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
-  const [sucursalId, setSucursalId] = useState<number | null>(null);
+  const [sucursalSel, setSucursalSel] = useState<number | 'all'>('all');
+  const [scope, setScope] = useState<Scope>('mes');
   const [periodo, setPeriodo] = useState(currentPeriodo());
-  const [, setKpiData] = useState<RespuestaKpis | null>(null);
-  const [kpiStatus, setKpiStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
+
+  const [kpiStatus, setKpiStatus] = useState<Status>('idle');
   const [kpiCards, setKpiCards] = useState<KpiCard[]>([]);
   const [chartData, setChartData] = useState<ChartSeries | null>(null);
-  const [chartStatus, setChartStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
+  const [chartStatus, setChartStatus] = useState<Status>('idle');
 
   useEffect(() => {
     const ac = new AbortController();
-    listarSucursales(ac.signal)
-      .then(list => {
-        setSucursales(list);
-        if (list.length > 0) setSucursalId(list[0].id);
-      })
-      .catch(() => {});
+    listarSucursales(ac.signal).then(setSucursales).catch(() => {});
     return () => ac.abort();
   }, []);
 
-  const fetchKpis = useCallback(async (sid: number, per: string) => {
-    setKpiStatus('loading');
-    setKpiData(null);
-    const ac = new AbortController();
-    try {
-      const data = await obtenerKpis(sid, per, ac.signal);
-      setKpiData(data);
-      setKpiCards(kpisFromResponse(data));
-      setKpiStatus('idle');
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return;
-      if (err instanceof ApiError && err.status === 404) {
-        setKpiStatus('nodata');
-      } else {
-        setKpiStatus('error');
-      }
-    }
-  }, []);
+  // Filtra las filas de un mes según la sucursal seleccionada.
+  const seleccionar = useCallback((rows: RespuestaKpis[], suc: number | 'all') =>
+    suc === 'all' ? rows : rows.filter(r => r.sucursalId === suc), []);
 
-  const fetchChart = useCallback(async (sid: number, per: string) => {
+  const fetchKpis = useCallback(async (per: string, suc: number | 'all', sc: Scope) => {
+    setKpiStatus('loading');
+    try {
+      if (sc === 'mes') {
+        const rows = await obtenerComparativo(per);
+        const sel = seleccionar(Array.isArray(rows) ? rows : [], suc);
+        const agg = agregar(sel);
+        if (!agg.hay) { setKpiStatus('nodata'); return; }
+        setKpiCards(kpisFromAgregado(agg));
+        setKpiStatus('idle');
+      } else {
+        // 'todos': itera los últimos 12 meses y agrega todo.
+        const meses = ultimosMeses(per, 12);
+        const porMes = await Promise.all(
+          meses.map(mo => obtenerComparativo(mo.periodo).catch(() => [] as RespuestaKpis[])),
+        );
+        const seleccionados = porMes.map(rows => seleccionar(Array.isArray(rows) ? rows : [], suc));
+        const todas = seleccionados.flat();
+        if (todas.length === 0) { setKpiStatus('nodata'); return; }
+        const agg = agregar(todas);
+        // productosBajoMinimo: usa el del último mes con datos (no acumular un flujo de stock).
+        let bajoMinimoUltimo = 0;
+        for (let i = seleccionados.length - 1; i >= 0; i--) {
+          if (seleccionados[i].length > 0) {
+            bajoMinimoUltimo = seleccionados[i].reduce((s, r) => s + Number(r.productosBajoMinimo), 0);
+            break;
+          }
+        }
+        agg.productosBajoMinimo = bajoMinimoUltimo;
+        setKpiCards(kpisFromAgregado(agg));
+        setKpiStatus('idle');
+      }
+    } catch {
+      setKpiStatus('error');
+    }
+  }, [seleccionar]);
+
+  // Gráfico de 6 meses, respeta sucursalSel (igual que ReportesView.fetchChart).
+  const fetchChart = useCallback(async (per: string, suc: number | 'all') => {
     setChartStatus('loading');
     const meses = ultimosMeses(per, 6);
     try {
-      const results = await Promise.all(
-        meses.map(mo => obtenerKpis(sid, mo.periodo).catch(() => null)),
+      const porMes = await Promise.all(
+        meses.map(mo => obtenerComparativo(mo.periodo).catch(() => [] as RespuestaKpis[])),
       );
-      if (!results.some(Boolean)) {
+      const agregados = porMes.map(rows => {
+        const sel = seleccionar(Array.isArray(rows) ? rows : [], suc);
+        return {
+          ventas: sel.reduce((s, r) => s + Number(r.totalVentas), 0),
+          tx: sel.reduce((s, r) => s + Number(r.cantidadTransacciones), 0),
+          hay: sel.length > 0,
+        };
+      });
+      if (!agregados.some(a => a.hay)) {
         setChartData(null);
         setChartStatus('nodata');
         return;
@@ -165,22 +220,26 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
       setChartData({
         months: meses.map(m => m.corto),
         fullLabels: meses.map(m => m.full),
-        ventas: results.map(r => (r ? Number(r.totalVentas) / 1_000_000 : 0)),
-        tx: results.map(r => (r ? Number(r.cantidadTransacciones) : 0)),
+        ventas: agregados.map(a => a.ventas / 1_000_000),
+        tx: agregados.map(a => a.tx),
       });
       setChartStatus('idle');
     } catch {
       setChartStatus('error');
     }
-  }, []);
+  }, [seleccionar]);
 
   useEffect(() => {
-    if (sucursalId == null || !periodo) return;
-    fetchKpis(sucursalId, periodo);
-    fetchChart(sucursalId, periodo);
-  }, [sucursalId, periodo, fetchKpis, fetchChart]);
+    if (!periodo) return;
+    fetchKpis(periodo, sucursalSel, scope);
+    fetchChart(periodo, sucursalSel);
+  }, [periodo, sucursalSel, scope, fetchKpis, fetchChart]);
 
-  const sucursalNombre = sucursales.find(s => s.id === sucursalId)?.nombre ?? '';
+  const sucursalNombre = sucursalSel === 'all'
+    ? 'Todas las sucursales'
+    : sucursales.find(s => s.id === sucursalSel)?.nombre ?? '';
+
+  const alcanceLabel = scope === 'mes' ? periodo : 'Últimos 12 meses';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -188,22 +247,39 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', flexWrap: 'wrap' }}>
         <span className="ds-label" style={{ marginRight: 2 }}>Ver KPIs de</span>
         <div style={{ position: 'relative' }}>
-          <select className="input select" value={sucursalId ?? ''} onChange={e => setSucursalId(Number(e.target.value))}
+          <select className="input select" value={sucursalSel}
+            onChange={e => setSucursalSel(e.target.value === 'all' ? 'all' : Number(e.target.value))}
             style={{ height: 34, paddingLeft: 32, paddingRight: 14, minWidth: 200 }}>
+            <option value="all">Todas las sucursales</option>
             {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
           <Icon name="map-pin" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
         </div>
-        <div style={{ position: 'relative' }}>
-          <input
-            type="month"
-            className="input"
-            value={periodo}
-            onChange={e => setPeriodo(e.target.value)}
-            style={{ height: 34, paddingLeft: 32, paddingRight: 10, minWidth: 160 }}
-          />
-          <Icon name="calendar" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+
+        {/* Alcance: Mes vs Todos los meses */}
+        <div style={{ display: 'inline-flex', border: '1px solid var(--bg-border)', borderRadius: 8, overflow: 'hidden', height: 34 }}>
+          {(['mes', 'todos'] as Scope[]).map(sc => (
+            <button key={sc}
+              className={'btn btn-sm ' + (scope === sc ? 'btn-primary' : 'btn-ghost')}
+              style={{ height: 32, borderRadius: 0, border: 'none' }}
+              onClick={() => setScope(sc)}>
+              {sc === 'mes' ? 'Mes' : 'Todos los meses'}
+            </button>
+          ))}
         </div>
+
+        {scope === 'mes' && (
+          <div style={{ position: 'relative' }}>
+            <input
+              type="month"
+              className="input"
+              value={periodo}
+              onChange={e => setPeriodo(e.target.value)}
+              style={{ height: 34, paddingLeft: 32, paddingRight: 10, minWidth: 160 }}
+            />
+            <Icon name="calendar" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+          </div>
+        )}
         {kpiStatus === 'loading' && (
           <span className="ds-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="loader" size={14} />Cargando KPIs…
@@ -218,7 +294,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
             {[0,1,2,3].map(i => (
               <div key={i} className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="inbox" size={24} style={{ color: 'var(--text-disabled)' }} />
-                <div className="ds-sm" style={{ color: 'var(--text-secondary)', textAlign: 'center', fontSize: 12 }}>No hay datos para el período seleccionado</div>
+                <div className="ds-sm" style={{ color: 'var(--text-secondary)', textAlign: 'center', fontSize: 12 }}>No hay datos para el alcance seleccionado</div>
               </div>
             ))}
           </div>
@@ -228,7 +304,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
               <div key={i} className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="alert-circle" size={24} style={{ color: 'var(--color-danger)' }} />
                 <div className="ds-sm" style={{ color: 'var(--text-secondary)', textAlign: 'center', fontSize: 12 }}>Error al cargar</div>
-                <button className="btn btn-ghost btn-sm" onClick={() => sucursalId && fetchKpis(sucursalId, periodo)}>Reintentar</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => fetchKpis(periodo, sucursalSel, scope)}>Reintentar</button>
               </div>
             ))}
           </div>
@@ -247,7 +323,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
         )}
         <div className="ds-label" style={{ fontSize: 11, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-disabled)' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)' }} />
-          {sucursalNombre ? `${sucursalNombre} · ${periodo}` : 'Selecciona sucursal y período'}
+          {sucursalNombre ? `${sucursalNombre} · ${alcanceLabel}` : 'Selecciona sucursal y período'}
         </div>
       </div>
 
@@ -268,7 +344,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
             <div style={{ height: 220, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="alert-circle" size={22} style={{ color: 'var(--color-danger)' }} />
               <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>Error al cargar la serie</div>
-              <button className="btn btn-ghost btn-sm" onClick={() => sucursalId && fetchChart(sucursalId, periodo)}>Reintentar</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => fetchChart(periodo, sucursalSel)}>Reintentar</button>
             </div>
           ) : chartData ? (
             <LineChart data={chartData} height={220} />

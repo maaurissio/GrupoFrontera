@@ -42,4 +42,12 @@ public class ReporteResource {
     public Response comparativo(@QueryParam("periodo") String periodo) {
         return reportesClient.obtenerComparativo(periodo);
     }
+
+    @GET
+    @Path("/inventario")
+    public Response inventario(
+            @QueryParam("formato") String formato,
+            @QueryParam("sucursalId") Long sucursalId) {
+        return reportesClient.exportarInventario(formato, sucursalId);
+    }
 }

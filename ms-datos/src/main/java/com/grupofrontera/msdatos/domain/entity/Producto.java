@@ -13,44 +13,54 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 
 @Entity
-@Table(name = "dato_consolidado")
-public class DatoConsolidado extends PanacheEntityBase {
+@Table(name = "producto")
+public class Producto extends PanacheEntityBase {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
-    @NotNull
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "fuente_id", nullable = false)
-    public Fuente fuente;
+    @NotBlank
+    @Column(name = "codigo", nullable = false, length = 100)
+    public String codigo;
+
+    @NotBlank
+    @Column(name = "nombre", nullable = false, length = 200)
+    public String nombre;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sucursal_id", nullable = false)
     public Sucursal sucursal;
 
-    @NotBlank
-    @Column(name = "tipo_dato", nullable = false, length = 100)
-    public String tipoDato;
-
-    @NotNull
-    @Column(name = "periodo", nullable = false)
-    public LocalDate periodo;
-
-    @Column(name = "valor", columnDefinition = "TEXT")
-    public String valor;
-
     @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "estado", nullable = false, length = 20)
-    public EstadoDato estado = EstadoDato.RECIBIDO;
+    @Column(name = "categoria", nullable = false, length = 40)
+    public CategoriaProducto categoria;
+
+    @Column(name = "stock", nullable = false)
+    public Integer stock = 0;
+
+    @Column(name = "stock_minimo", nullable = false)
+    public Integer stockMinimo = 0;
+
+    @Column(name = "precio", nullable = false, precision = 12, scale = 2)
+    public BigDecimal precio = BigDecimal.ZERO;
+
+    @Column(name = "descripcion", columnDefinition = "TEXT")
+    public String descripcion;
+
+    @Column(name = "activo", nullable = false)
+    public Boolean activo = true;
+
+    @Column(name = "fecha_actualizacion_stock")
+    public LocalDateTime fechaActualizacionStock;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     public LocalDateTime createdAt;

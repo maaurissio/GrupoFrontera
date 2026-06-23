@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.UUID;
 
 @Path("/auth")
 @Produces(MediaType.APPLICATION_JSON)
@@ -48,5 +49,12 @@ public class AuthResource {
     @Path("/validate")
     public ValidateResponseDTO validate(@HeaderParam("Authorization") String authHeader) {
         return authService.validate(authHeader);
+    }
+
+    @PUT
+    @Path("/credenciales/{usuarioRefId}/estado")
+    public Response cambiarEstado(@PathParam("usuarioRefId") UUID usuarioRefId, @Valid EstadoRequestDTO dto) {
+        authService.cambiarEstado(usuarioRefId, dto.activo);
+        return Response.noContent().build();
     }
 }

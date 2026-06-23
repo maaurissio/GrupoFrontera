@@ -1,5 +1,6 @@
 package com.grupofrontera.msreportes.recurso;
 
+import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
 import com.grupofrontera.msreportes.servicio.ExportacionServicio;
 import com.grupofrontera.msreportes.servicio.ReportesServicio;
@@ -96,6 +97,50 @@ public class ReportesRecurso {
             return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
         }
         byte[] xls = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres);
+        return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
+    }
+
+    @GET
+    @Path("/inventario")
+    public Response exportarInventario(
+            @QueryParam("formato") String formato,
+            @QueryParam("sucursalId") Long sucursalId) {
+
+        if (formato == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\": \"El parametro formato es obligatorio\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+
+        String fmt = formato.toLowerCase();
+        if (!fmt.equals("pdf") && !fmt.equals("xlsx")) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\": \"Formato no soportado. Use pdf o xlsx\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+
+        // Lanza 404 (NotFoundException) si no hay productos
+        List<ProductoDto> productos = reportesServicio.obtenerInventario(sucursalId);
+
+        boolean consolidado = sucursalId == null;
+        String alcance;
+        String nombreArchivo;
+        if (consolidado) {
+            alcance = "Todas las sucursales";
+            nombreArchivo = "inventario_consolidado";
+        } else {
+            alcance = reportesServicio.obtenerNombresSucursales()
+                    .getOrDefault(sucursalId, "Sucursal " + sucursalId);
+            nombreArchivo = "inventario_sucursal" + sucursalId;
+        }
+
+        if (fmt.equals("pdf")) {
+            byte[] pdf = exportacionServicio.exportarInventarioPdf(productos, alcance, consolidado);
+            return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
+        }
+        byte[] xls = exportacionServicio.exportarInventarioExcel(productos, alcance, consolidado);
         return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
     }
 

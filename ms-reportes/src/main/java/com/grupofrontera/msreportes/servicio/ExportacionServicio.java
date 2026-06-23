@@ -1,5 +1,6 @@
 package com.grupofrontera.msreportes.servicio;
 
+import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
@@ -30,9 +31,11 @@ import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class ExportacionServicio {
@@ -294,6 +297,271 @@ public class ExportacionServicio {
     }
 
     // ================================================================
+    //  PDF — inventario (individual o consolidado por sucursal)
+    // ================================================================
+    public byte[] exportarInventarioPdf(List<ProductoDto> productos, String alcance, boolean consolidado) {
+        LOG.infof("Generando PDF de inventario alcance=%s (%d productos)", alcance, productos.size());
+        try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            Document doc = new Document(PageSize.A4.rotate(), 40, 40, 90, 60);
+            PdfWriter writer = PdfWriter.getInstance(doc, salida);
+            writer.setPageEvent(new PieDePagina());
+            doc.open();
+
+            encabezado(doc, "Reporte de Inventario");
+            subtituloAlcanceInventario(doc, alcance);
+
+            // Totales globales
+            int totStock = 0;
+            BigDecimal totValorizado = BigDecimal.ZERO;
+            for (ProductoDto p : productos) {
+                totStock += nz(p.stock);
+                totValorizado = totValorizado.add(valorizado(p));
+            }
+
+            // Resumen ejecutivo (tarjetas)
+            PdfPTable cards = new PdfPTable(3);
+            cards.setWidthPercentage(100);
+            cards.setSpacingBefore(6);
+            tarjeta(cards, "Productos", String.valueOf(productos.size()), AZUL);
+            tarjeta(cards, "Stock total", num(totStock), AZUL);
+            tarjeta(cards, "Valorizado total", clp(totValorizado), AZUL);
+            doc.add(cards);
+            doc.add(espacio(12));
+
+            if (consolidado) {
+                // Agrupado por sucursal con sección/fila de totales por grupo
+                Map<Long, List<ProductoDto>> porSucursal = productos.stream()
+                        .collect(Collectors.groupingBy(
+                                p -> p.sucursalId == null ? -1L : p.sucursalId,
+                                LinkedHashMap::new, Collectors.toList()));
+
+                for (Map.Entry<Long, List<ProductoDto>> grupo : porSucursal.entrySet()) {
+                    List<ProductoDto> items = grupo.getValue();
+                    String nombreSuc = items.isEmpty() || items.get(0).sucursalNombre == null
+                            ? "Sucursal " + grupo.getKey()
+                            : items.get(0).sucursalNombre;
+
+                    com.lowagie.text.Paragraph titSuc = new com.lowagie.text.Paragraph(nombreSuc,
+                            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, AZUL));
+                    titSuc.setSpacingBefore(8);
+                    titSuc.setSpacingAfter(4);
+                    doc.add(titSuc);
+
+                    doc.add(tablaInventario(items, true));
+                    doc.add(espacio(4));
+                }
+
+                // Total general
+                PdfPTable tg = tablaBase(new float[]{2.4f, 1.6f, 1.6f});
+                celdaTotal(tg, "TOTAL GENERAL", Element.ALIGN_LEFT);
+                celdaTotal(tg, "Stock: " + num(totStock), Element.ALIGN_RIGHT);
+                celdaTotal(tg, "Valorizado: " + clp(totValorizado), Element.ALIGN_RIGHT);
+                doc.add(espacio(6));
+                doc.add(tg);
+            } else {
+                doc.add(tablaInventario(productos, true));
+            }
+
+            doc.close();
+            return salida.toByteArray();
+        } catch (Exception e) {
+            LOG.errorf(e, "Error al generar PDF de inventario");
+            throw new RuntimeException("Error al generar el reporte de inventario PDF", e);
+        }
+    }
+
+    private PdfPTable tablaInventario(List<ProductoDto> productos, boolean conTotales) throws Exception {
+        PdfPTable t = tablaBase(new float[]{1.3f, 3f, 1.8f, 1f, 1f, 1.6f, 1.8f});
+        celdaEncabezado(t, "Código");
+        celdaEncabezado(t, "Producto");
+        celdaEncabezado(t, "Categoría");
+        celdaEncabezado(t, "Stock");
+        celdaEncabezado(t, "Mínimo");
+        celdaEncabezado(t, "Precio");
+        celdaEncabezado(t, "Valorizado");
+
+        int totStock = 0;
+        BigDecimal totValorizado = BigDecimal.ZERO;
+        boolean alt = false;
+        for (ProductoDto p : productos) {
+            Color bg = alt ? FILA_ALT : Color.WHITE;
+            Color colStock = nz(p.stock) <= nz(p.stockMinimo) ? ROJO : Color.BLACK;
+            celdaTxt(t, nvl(p.codigo), bg, Element.ALIGN_LEFT, Color.BLACK);
+            celdaTxt(t, nvl(p.nombre), bg, Element.ALIGN_LEFT, Color.BLACK);
+            celdaTxt(t, nvl(p.categoria), bg, Element.ALIGN_LEFT, TXT_SUAVE);
+            celdaTxt(t, num(nz(p.stock)), bg, Element.ALIGN_RIGHT, colStock);
+            celdaTxt(t, num(nz(p.stockMinimo)), bg, Element.ALIGN_RIGHT, TXT_SUAVE);
+            celdaTxt(t, clp(p.precio), bg, Element.ALIGN_RIGHT, Color.BLACK);
+            celdaTxt(t, clp(valorizado(p)), bg, Element.ALIGN_RIGHT, Color.BLACK);
+            totStock += nz(p.stock);
+            totValorizado = totValorizado.add(valorizado(p));
+            alt = !alt;
+        }
+
+        if (conTotales) {
+            celdaTotal(t, "", Element.ALIGN_CENTER);
+            celdaTotal(t, "TOTAL", Element.ALIGN_LEFT);
+            celdaTotal(t, "", Element.ALIGN_CENTER);
+            celdaTotal(t, num(totStock), Element.ALIGN_RIGHT);
+            celdaTotal(t, "", Element.ALIGN_CENTER);
+            celdaTotal(t, "", Element.ALIGN_CENTER);
+            celdaTotal(t, clp(totValorizado), Element.ALIGN_RIGHT);
+        }
+        return t;
+    }
+
+    // ================================================================
+    //  Excel — inventario (individual o consolidado por sucursal)
+    // ================================================================
+    public byte[] exportarInventarioExcel(List<ProductoDto> productos, String alcance, boolean consolidado) {
+        LOG.infof("Generando Excel de inventario alcance=%s (%d productos)", alcance, productos.size());
+        try (Workbook libro = new XSSFWorkbook(); ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            Sheet hoja = libro.createSheet("Inventario");
+            hoja.setColumnWidth(0, 4000);
+            hoja.setColumnWidth(1, 10000);
+            hoja.setColumnWidth(2, 5000);
+            for (int c = 3; c <= 6; c++) hoja.setColumnWidth(c, 4500);
+
+            CellStyle titulo = estiloTitulo(libro);
+            CellStyle encab = estiloEncabezado(libro);
+            CellStyle txt = estiloTexto(libro, false);
+            CellStyle txtAlt = estiloTexto(libro, true);
+            CellStyle total = estiloTotal(libro);
+            CellStyle subtitulo = estiloTotal(libro);
+
+            int r = 0;
+            Row rt = hoja.createRow(r++);
+            rt.createCell(0).setCellValue("Reporte de Inventario · " + alcance);
+            rt.getCell(0).setCellStyle(titulo);
+            hoja.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 6));
+            r++;
+
+            String[] cols = {"Código", "Producto", "Categoría", "Stock", "Mínimo", "Precio", "Valorizado"};
+
+            int totStock = 0;
+            BigDecimal totValorizado = BigDecimal.ZERO;
+
+            if (consolidado) {
+                Map<Long, List<ProductoDto>> porSucursal = productos.stream()
+                        .collect(Collectors.groupingBy(
+                                p -> p.sucursalId == null ? -1L : p.sucursalId,
+                                LinkedHashMap::new, Collectors.toList()));
+
+                for (Map.Entry<Long, List<ProductoDto>> grupo : porSucursal.entrySet()) {
+                    List<ProductoDto> items = grupo.getValue();
+                    String nombreSuc = items.isEmpty() || items.get(0).sucursalNombre == null
+                            ? "Sucursal " + grupo.getKey()
+                            : items.get(0).sucursalNombre;
+
+                    Row rsuc = hoja.createRow(r++);
+                    celdaXls(rsuc, 0, nombreSuc, subtitulo);
+                    for (int c = 1; c <= 6; c++) celdaXls(rsuc, c, "", subtitulo);
+
+                    Row rh = hoja.createRow(r++);
+                    for (int c = 0; c < cols.length; c++) celdaXls(rh, c, cols[c], encab);
+
+                    int grpStock = 0;
+                    BigDecimal grpValorizado = BigDecimal.ZERO;
+                    boolean alt = false;
+                    for (ProductoDto p : items) {
+                        Row row = hoja.createRow(r++);
+                        CellStyle st = alt ? txtAlt : txt;
+                        escribirFilaProducto(row, p, st);
+                        grpStock += nz(p.stock);
+                        grpValorizado = grpValorizado.add(valorizado(p));
+                        alt = !alt;
+                    }
+                    Row rgt = hoja.createRow(r++);
+                    celdaXls(rgt, 0, "", total);
+                    celdaXls(rgt, 1, "Subtotal " + nombreSuc, total);
+                    celdaXls(rgt, 2, "", total);
+                    celdaXls(rgt, 3, num(grpStock), total);
+                    celdaXls(rgt, 4, "", total);
+                    celdaXls(rgt, 5, "", total);
+                    celdaXls(rgt, 6, clp(grpValorizado), total);
+                    r++; // fila en blanco entre grupos
+
+                    totStock += grpStock;
+                    totValorizado = totValorizado.add(grpValorizado);
+                }
+
+                Row rtot = hoja.createRow(r++);
+                celdaXls(rtot, 0, "", total);
+                celdaXls(rtot, 1, "TOTAL GENERAL", total);
+                celdaXls(rtot, 2, "", total);
+                celdaXls(rtot, 3, num(totStock), total);
+                celdaXls(rtot, 4, "", total);
+                celdaXls(rtot, 5, "", total);
+                celdaXls(rtot, 6, clp(totValorizado), total);
+            } else {
+                Row rh = hoja.createRow(r++);
+                for (int c = 0; c < cols.length; c++) celdaXls(rh, c, cols[c], encab);
+
+                boolean alt = false;
+                for (ProductoDto p : productos) {
+                    Row row = hoja.createRow(r++);
+                    CellStyle st = alt ? txtAlt : txt;
+                    escribirFilaProducto(row, p, st);
+                    totStock += nz(p.stock);
+                    totValorizado = totValorizado.add(valorizado(p));
+                    alt = !alt;
+                }
+                Row rtot = hoja.createRow(r++);
+                celdaXls(rtot, 0, "", total);
+                celdaXls(rtot, 1, "TOTAL", total);
+                celdaXls(rtot, 2, "", total);
+                celdaXls(rtot, 3, num(totStock), total);
+                celdaXls(rtot, 4, "", total);
+                celdaXls(rtot, 5, "", total);
+                celdaXls(rtot, 6, clp(totValorizado), total);
+            }
+
+            libro.write(salida);
+            return salida.toByteArray();
+        } catch (Exception e) {
+            LOG.errorf(e, "Error al generar Excel de inventario");
+            throw new RuntimeException("Error al generar el reporte de inventario Excel", e);
+        }
+    }
+
+    private void escribirFilaProducto(Row row, ProductoDto p, CellStyle st) {
+        celdaXls(row, 0, nvl(p.codigo), st);
+        celdaXls(row, 1, nvl(p.nombre), st);
+        celdaXls(row, 2, nvl(p.categoria), st);
+        celdaXls(row, 3, num(nz(p.stock)), st);
+        celdaXls(row, 4, num(nz(p.stockMinimo)), st);
+        celdaXls(row, 5, clp(p.precio), st);
+        celdaXls(row, 6, clp(valorizado(p)), st);
+    }
+
+    private void subtituloAlcanceInventario(Document doc, String alcance) throws Exception {
+        Font fSuave = FontFactory.getFont(FontFactory.HELVETICA, 10, TXT_SUAVE);
+        com.lowagie.text.Paragraph p = new com.lowagie.text.Paragraph();
+        p.setFont(fSuave);
+        p.add(new Phrase("Alcance: ", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, TXT_SUAVE)));
+        p.add(new Phrase(alcance + "    |    ", fSuave));
+        p.add(new Phrase("Generado: ", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, TXT_SUAVE)));
+        p.add(new Phrase(LocalDateTime.now().format(FECHA_FMT), fSuave));
+        p.setSpacingAfter(8);
+        doc.add(p);
+
+        // línea separadora
+        PdfPTable linea = new PdfPTable(1);
+        linea.setWidthPercentage(100);
+        PdfPCell c = new PdfPCell();
+        c.setFixedHeight(2);
+        c.setBackgroundColor(AZUL_BANDA);
+        c.setBorder(Rectangle.NO_BORDER);
+        linea.addCell(c);
+        doc.add(linea);
+    }
+
+    private BigDecimal valorizado(ProductoDto p) {
+        if (p.precio == null) return BigDecimal.ZERO;
+        return p.precio.multiply(BigDecimal.valueOf(nz(p.stock)));
+    }
+
+    // ================================================================
     //  Helpers PDF
     // ================================================================
     private void encabezado(Document doc, String titulo) throws Exception {
@@ -483,6 +751,14 @@ public class ExportacionServicio {
         NumberFormat nf = NumberFormat.getInstance(LOCALE_CL);
         nf.setMaximumFractionDigits(0);
         return "$" + nf.format(monto);
+    }
+
+    private String num(int valor) {
+        return NumberFormat.getInstance(LOCALE_CL).format(valor);
+    }
+
+    private String nvl(String s) {
+        return s == null ? "" : s;
     }
 
     private String pct(BigDecimal v) {

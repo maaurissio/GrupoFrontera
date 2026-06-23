@@ -13,4 +13,8 @@ public class RefreshTokenRepository implements PanacheRepositoryBase<RefreshToke
     public Optional<RefreshToken> findByToken(String token) {
         return find("token", token).firstResultOptional();
     }
+
+    public void invalidarTodosPorCredencial(UUID credencialId) {
+        update("invalidado = true where credencial.id = ?1 and invalidado = false", credencialId);
+    }
 }

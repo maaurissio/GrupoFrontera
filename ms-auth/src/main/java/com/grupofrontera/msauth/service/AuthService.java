@@ -97,6 +97,20 @@ public class AuthService {
                 .ifPresent(rt -> rt.invalidado = true);
     }
 
+    @Transactional
+    public void cambiarEstado(UUID usuarioRefId, boolean activo) {
+        Credencial c = credencialRepository.findByUsuarioRefId(usuarioRefId)
+                .orElseThrow(() -> new WebApplicationException(
+                        "Credencial no encontrada para usuario: " + usuarioRefId, Response.Status.NOT_FOUND));
+
+        c.activo = activo;
+        c.actualizadoEn = LocalDateTime.now();
+
+        if (!activo) {
+            refreshTokenRepository.invalidarTodosPorCredencial(c.id);
+        }
+    }
+
     public ValidateResponseDTO validate(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return new ValidateResponseDTO(false, null, null);
