@@ -5,6 +5,7 @@ import com.grupofrontera.bff.client.DatosClient;
 import com.grupofrontera.bff.client.UsersClient;
 import com.grupofrontera.bff.dto.SucursalDTO;
 import com.grupofrontera.bff.dto.UsuarioCreateRequest;
+import com.grupofrontera.bff.dto.UsuarioUpdateRequest;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
@@ -98,6 +99,18 @@ public class UsuarioResource {
                 return Response.status(Response.Status.CREATED).entity(usuarioMap).build();
             }
         }
+    }
+
+    @PUT
+    @Path("/{id}")
+    public Object actualizar(@PathParam("id") UUID id, UsuarioUpdateRequest request) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("nombre", request.nombre);
+        payload.put("apellido", request.apellido);
+        payload.put("email", request.email);
+        payload.put("telefono", request.telefono);
+        payload.put("fechaNacimiento", request.fechaNacimiento != null ? request.fechaNacimiento.toString() : null);
+        return enriquecer(usersClient.actualizarUsuario(id, payload), mapaNombresSucursal());
     }
 
     @PUT

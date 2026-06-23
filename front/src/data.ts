@@ -31,8 +31,9 @@ export const DATA = {
     { id: "reportes",   label: "Reportes",  icon: "bar-chart-3" },
     { id: "productos",  label: "Productos", icon: "package",    badge: 0 },
     { id: "usuarios",   label: "Usuarios",  icon: "users" },
+    { id: "roles",      label: "Roles",     icon: "shield" },
     { id: "sucursales", label: "Sucursales", icon: "map-pin" },
   ],
 };
 
-export type ViewId = "dashboard" | "reportes" | "usuarios" | "sucursales" | "configuracion" | "productos";
+export type ViewId = "dashboard" | "reportes" | "usuarios" | "roles" | "sucursales" | "configuracion" | "productos";

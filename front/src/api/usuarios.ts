@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { UsuarioDTO, UsuarioCreatePayload, AsignacionSucursalDTO } from './types';
+import type { UsuarioDTO, UsuarioCreatePayload, UsuarioUpdatePayload, AsignacionSucursalDTO } from './types';
 
 export function listarUsuarios(signal?: AbortSignal): Promise<UsuarioDTO[]> {
   // /todos incluye inactivos para poder reactivarlos; el filtro "Solo activos" es del lado del cliente.
@@ -13,6 +13,13 @@ export function obtenerUsuario(id: string, signal?: AbortSignal): Promise<Usuari
 export function crearUsuario(data: UsuarioCreatePayload): Promise<unknown> {
   return apiFetch('/api/bff/usuarios', {
     method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function actualizarUsuario(id: string, data: UsuarioUpdatePayload): Promise<UsuarioDTO> {
+  return apiFetch<UsuarioDTO>(`/api/bff/usuarios/${id}`, {
+    method: 'PUT',
     body: JSON.stringify(data),
   });
 }

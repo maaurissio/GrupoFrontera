@@ -7,6 +7,7 @@ import { PageHead, Button } from './components/Primitives';
 import { DashboardView } from './views/DashboardView';
 import { ReportesView } from './views/ReportesView';
 import { UsersView } from './views/UsersView';
+import { RolesView } from './views/RolesView';
 import { BranchesView } from './views/BranchesView';
 import { ConfiguracionView } from './views/ConfiguracionView';
 import { ProductosView } from './views/ProductosView';
@@ -16,6 +17,7 @@ const TITLES: Record<ViewId, string> = {
   dashboard:     'Resumen',
   reportes:      'Reportes',
   usuarios:      'Usuarios',
+  roles:         'Roles',
   sucursales:    'Sucursales',
   configuracion: 'Configuración',
   productos:     'Catálogo de productos',
@@ -25,6 +27,7 @@ const SUBTITLES: Record<ViewId, string> = {
   dashboard:     'Estado operacional en tiempo real · Grupo Cordillera',
   reportes:      'KPIs por sucursal y período · exportables',
   usuarios:      'Roles, sucursales y estado de cuentas',
+  roles:         'Roles del sistema y sus permisos',
   sucursales:    'Red de sucursales · ubicación y cobertura',
   configuracion: 'Preferencias del sistema y tu cuenta',
   productos:     'Inventario por sucursal · stock y precios',
@@ -46,6 +49,7 @@ function AppShell() {
       case 'dashboard':     return <DashboardView onNavigate={navigate} />;
       case 'reportes':      return <ReportesView />;
       case 'usuarios':      return <UsersView />;
+      case 'roles':         return <RolesView />;
       case 'sucursales':    return <BranchesView />;
       case 'configuracion': return <ConfiguracionView />;
       case 'productos':     return <ProductosView />;
@@ -55,6 +59,7 @@ function AppShell() {
 
   const headerActions = () => {
     if (view === 'usuarios') return null;
+    if (view === 'roles') return null;
     if (view === 'sucursales') return <Button variant="secondary" icon="map">Ver todas en el mapa</Button>;
     if (view === 'reportes') return null;
     if (view === 'productos') return null;
@@ -70,7 +75,7 @@ function AppShell() {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar active={view} onNavigate={navigate} onLogout={logout} />
       <main ref={scrollRef} className="ds-scroll" style={{ flex: 1, overflowY: 'auto', height: '100%', position: 'relative' }}>
-        <Topbar title={TITLES[view]} alerts={2} onExport={() => setExporting(true)} />
+        <Topbar title={TITLES[view]} onExport={() => setExporting(true)} />
         <div style={{ padding: '28px 28px 48px' }}>
           <PageHead title={TITLES[view]} subtitle={SUBTITLES[view]}>
             {headerActions()}

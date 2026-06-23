@@ -11,6 +11,34 @@ export interface UsuarioDTO {
   sucursales: string[];
 }
 
+export type NombreRol =
+  | 'ADMIN' | 'CLIENTE' | 'VENDEDOR' | 'SOPORTE' | 'GERENTE'
+  | 'LOGISTICA' | 'RRHH' | 'CONTABILIDAD' | 'OPERADOR' | 'SUPERVISOR';
+
+export const NOMBRES_ROL: { value: NombreRol; label: string }[] = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'CLIENTE', label: 'Cliente' },
+  { value: 'VENDEDOR', label: 'Vendedor' },
+  { value: 'SOPORTE', label: 'Soporte' },
+  { value: 'GERENTE', label: 'Gerente' },
+  { value: 'LOGISTICA', label: 'Logística' },
+  { value: 'RRHH', label: 'RRHH' },
+  { value: 'CONTABILIDAD', label: 'Contabilidad' },
+  { value: 'OPERADOR', label: 'Operador' },
+  { value: 'SUPERVISOR', label: 'Supervisor' },
+];
+
+export interface RolDTO {
+  id: string;
+  nombre: NombreRol;
+  descripcion: string | null;
+}
+
+export interface RolCreatePayload {
+  nombre: NombreRol;
+  descripcion: string | null;
+}
+
 export interface SucursalDTO {
   id: number;
   codigo: string;
@@ -125,6 +153,14 @@ export interface UsuarioCreatePayload {
   email: string;
   password: string;
   telefono?: string;
+}
+
+export interface UsuarioUpdatePayload {
+  nombre: string;
+  apellido: string;
+  email: string;
+  telefono?: string;
+  fechaNacimiento?: string | null;
 }
 
 export interface SucursalCreatePayload {

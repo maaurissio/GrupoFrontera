@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Panel, ColorAvatar, ModalOverlay } from '../components/Primitives';
 import { DATA } from '../data';
-import { listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario, listarSucursalesUsuario, asignarSucursal, desasignarSucursal } from '../api/usuarios';
+import { listarUsuarios, crearUsuario, actualizarUsuario, desactivarUsuario, activarUsuario, listarSucursalesUsuario, asignarSucursal, desasignarSucursal } from '../api/usuarios';
 import { listarSucursales } from '../api/sucursales';
 import type { UsuarioDTO, SucursalDTO, AsignacionSucursalDTO } from '../api/types';
 import { ApiError } from '../api/types';
@@ -149,6 +149,83 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
           <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancelar</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {loading ? <><Icon name="loader" size={16} />Creando…</> : <><Icon name="check-circle-2" size={16} />Crear usuario</>}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function EditUserModal({ user, onClose, onUpdated }: { user: UsuarioDTO; onClose: () => void; onUpdated: (u: UsuarioDTO) => void }) {
+  const [nombre, setNombre] = useState(user.nombre);
+  const [apellido, setApellido] = useState(user.apellido);
+  const [email, setEmail] = useState(user.email);
+  const [telefono, setTelefono] = useState(user.telefono ?? '');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<FieldError>({});
+
+  async function handleSubmit() {
+    const errs: FieldError = {};
+    if (!nombre.trim() || !apellido.trim()) { errs.general = 'Nombre y apellido son obligatorios.'; }
+    if (!email.includes('@')) { errs.email = 'Ingresa un email válido.'; }
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+
+    setErrors({});
+    setLoading(true);
+    try {
+      const updated = await actualizarUsuario(user.id, {
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        email: email.trim(),
+        telefono: telefono.trim() || undefined,
+      });
+      onUpdated(updated);
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setErrors({ email: 'El email ya está registrado por otro usuario.' });
+      } else {
+        setErrors({ general: 'Ha ocurrido un error inesperado. Intente más tarde.' });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card" style={{ width: 480, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <h2 className="ds-h2" style={{ margin: 0 }}>Editar usuario</h2>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+
+        {errors.general && (
+          <div role="alert" style={{ background: 'rgba(239,68,68,.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="alert-circle" size={15} />{errors.general}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="field"><label className="field-label">Nombre *</label><input className="input" value={nombre} onChange={e => setNombre(e.target.value)} /></div>
+          <div className="field"><label className="field-label">Apellido *</label><input className="input" value={apellido} onChange={e => setApellido(e.target.value)} /></div>
+        </div>
+
+        <div className="field" style={{ marginTop: 14 }}>
+          <label className="field-label">Email *</label>
+          <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          {errors.email && <span style={{ fontSize: 12, color: 'var(--color-danger)', marginTop: 4, display: 'block' }}>{errors.email}</span>}
+        </div>
+
+        <div className="field" style={{ marginTop: 14 }}>
+          <label className="field-label">Teléfono</label>
+          <input className="input" value={telefono} onChange={e => setTelefono(e.target.value)} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {loading ? <><Icon name="loader" size={16} />Guardando…</> : <><Icon name="check-circle-2" size={16} />Guardar cambios</>}
           </button>
         </div>
       </div>
@@ -379,6 +456,7 @@ export function UsersView() {
   const [confirm, setConfirm] = useState<UsuarioDTO | null>(null);
   const [detail, setDetail] = useState<UsuarioDTO | null>(null);
   const [assign, setAssign] = useState<UsuarioDTO | null>(null);
+  const [edit, setEdit] = useState<UsuarioDTO | null>(null);
 
   const fetchUsuarios = useCallback(async () => {
     setStatus('loading');
@@ -408,6 +486,10 @@ export function UsersView() {
       if (u.id !== id) return u;
       return { ...u, estado: u.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO' };
     }));
+  }
+
+  function handleUpdated(updated: UsuarioDTO) {
+    setUsuarios(prev => prev.map(u => (u.id === updated.id ? { ...u, ...updated } : u)));
   }
 
   return (
@@ -471,6 +553,7 @@ export function UsersView() {
                       <td><Badge kind={em.kind} dot={u.estado !== 'INACTIVO'}>{u.estado}</Badge></td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Editar a ${u.nombre} ${u.apellido}`} title="Editar" onClick={() => setEdit(u)}><Icon name="pencil" size={14} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Asignar sucursales a ${u.nombre} ${u.apellido}`} title="Asignar sucursales" onClick={() => setAssign(u)}><Icon name="store" size={14} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Ver detalle de ${u.nombre} ${u.apellido}`} title="Ver detalle" onClick={() => setDetail(u)}><Icon name="eye" size={14} /></button>
                           <button className="btn btn-ghost btn-sm" style={{ height: 28, color: off ? 'var(--color-danger)' : 'var(--color-success)' }} onClick={() => setConfirm(u)}>{off ? 'Desactivar' : 'Activar'}</button>
@@ -501,6 +584,7 @@ export function UsersView() {
       {confirm && <ConfirmModal user={confirm} onClose={() => setConfirm(null)} onConfirmed={handleConfirmed} />}
       {detail && <UserDetailModal user={detail} onClose={() => setDetail(null)} />}
       {assign && <AssignBranchesModal user={assign} onClose={() => setAssign(null)} onChanged={fetchUsuarios} />}
+      {edit && <EditUserModal user={edit} onClose={() => setEdit(null)} onUpdated={handleUpdated} />}
     </div>
   );
 }
