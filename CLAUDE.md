@@ -18,7 +18,7 @@ Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`,
 | `ms-kpis`     | KPI computation              | **Fully implemented** — Flyway, consume RabbitMQ, 96 KPIs semilla (4 suc × 12 meses) |
 | `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI): reporte de KPIs **y de inventario de productos** |
 | `bff`         | Backend-for-frontend         | **Fully implemented** — integra todos los microservicios |
-| `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 8 vistas      |
+| `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 9 vistas      |
 
 Java package convention: `com.grupofrontera.ms<name>` (e.g. `com.grupofrontera.msusers`). `groupId` is `com.grupofrontera`. Note: `ms-users/contexto_ms_users.md` documents the original design but is **stale on two points** — the real package is `com.grupofrontera.*` (not `cl.duoc.cordillera`) and the Quarkus platform version in `pom.xml` is `3.36.0` (not 3.34.5). Trust the code/POM over that doc.
 
@@ -289,11 +289,14 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | GET    | /api/bff/usuarios/todos            | ms-users (incl. inactivos) |
 | GET    | /api/bff/usuarios/{id}             | ms-users         |
 | POST   | /api/bff/usuarios                  | ms-users + ms-auth |
+| PUT    | /api/bff/usuarios/{id}              | ms-users (edita nombre/apellido/email/telefono/fechaNacimiento) |
 | PUT    | /api/bff/usuarios/{id}/activar     | ms-users         |
 | PUT    | /api/bff/usuarios/{id}/desactivar  | ms-users         |
 | GET    | /api/bff/usuarios/{id}/sucursales  | ms-users (`/usuario-sucursales`, enriquecido) |
 | POST   | /api/bff/usuarios/{id}/sucursales  | ms-users (asigna sucursal) |
 | DELETE | /api/bff/usuarios/asignaciones-sucursal/{asignacionId} | ms-users (desasigna) |
+| GET    | /api/bff/roles                     | ms-users (solo activos) |
+| POST   | /api/bff/roles                     | ms-users (crea rol)     |
 | GET    | /api/bff/sucursales                | ms-datos         |
 | POST   | /api/bff/sucursales                | ms-datos         |
 | PUT    | /api/bff/sucursales/{id}           | ms-datos         |
@@ -328,6 +331,8 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 - **CORS**: habilitado para `http://localhost:5173`. ⚠️ En Quarkus 3.36 la clave es `quarkus.http.cors.enabled=true` (NO `quarkus.http.cors=true`, que se ignora silenciosamente con un warning). **El export de reportes requiere `quarkus.http.cors.exposed-headers=Content-Disposition`** — sin eso el navegador no deja leer el nombre del archivo descargado (PDF/Excel).
 - **Error propagation**: `ClientExceptionMapper` (`bff/src/main/java/com/grupofrontera/bff/exception/`) propaga códigos 4xx de los microservicios correctamente. `quarkus.rest-client.disable-default-mapper=true` en `application.properties`.
 - **Alta de usuario** (`UsuarioResource.crear`): orquesta ms-users → ms-auth. Usa `HashMap` (no `Map.of`, que lanza NPE con `fechaNacimiento=null`) y lee la entidad upstream con `Response.readEntity(...)` (no `getEntity()`, que en un cliente JAX-RS devuelve el `InputStream`). Propaga el status upstream (p. ej. 409 RUT/email duplicado).
+- **Edición de usuario** (`UsuarioResource.actualizar`, `PUT /api/bff/usuarios/{id}`): no toca ms-auth (solo perfil, no credenciales). `UsersClient.actualizarUsuario` devuelve `Object` (no `Response`) — un 4xx upstream (p. ej. 409 email duplicado) lo convierte el MicroProfile REST Client en `ClientWebApplicationException`, que el `ClientExceptionMapper` global traduce de vuelta al status/body correctos; no hace falta try/catch manual en el resource. ms-users (`UsuarioService.actualizar`) trata cada campo del DTO como opcional (`if (dto.campo != null) ...`), así que se soporta update parcial.
+- **Roles**: ms-users ya tenía CRUD completo (`GET/POST/PUT /roles`, activar/desactivar) pero el BFF solo proxea `GET`/`POST /api/bff/roles` (listar + crear) — no hay edición ni activar/desactivar de roles expuestos, porque el front solo necesita listar y crear.
 - **Endpoint de estado de sucursal** (`PUT /sucursales/{id}/estado`): el body espera el campo **`activo`** (booleano), no `habilitada`. Mismo contrato en ms-datos (`EstadoRequest.activo`).
 - **Sin seguridad interna**: el BFF no valida JWT — confía en que ms-auth valida. ms-users no tiene extensiones de seguridad.
 - **Asignación usuario↔sucursal**: `GET/POST /api/bff/usuarios/{usuarioId}/sucursales` y `DELETE /api/bff/usuarios/asignaciones-sucursal/{asignacionId}`. ⚠️ ms-users expone esto en **`/usuario-sucursales`** (NO en `/usuarios/{id}/sucursales`): el `UsersClient` del BFF apunta a `/usuario-sucursales`, `/usuario-sucursales/usuario/{id}` y `/usuario-sucursales/{id}/desactivar`. El POST del BFF inyecta `usuarioId` (del path) en el body `{usuarioId, sucursalId}` que espera ms-users; el GET enriquece cada asignación con `sucursalNombre` (vía ms-datos). El front usa esto en `UsersView` (botón "Asignar sucursales").
@@ -389,7 +394,8 @@ src/
     client.test.ts
     auth.ts                   # loginApi, logoutApi, refreshApi
     auth.test.ts
-    usuarios.ts               # listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario
+    usuarios.ts               # listarUsuarios, crearUsuario, actualizarUsuario, desactivarUsuario, activarUsuario
+    roles.ts                  # listarRoles, crearRol
     sucursales.ts             # listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal
     kpis.ts                   # obtenerKpis, obtenerComparativo
     reportes.ts               # exportarReporte → blob download
@@ -413,18 +419,19 @@ src/
     Primitives.tsx            # Badge, Delta, Button, Avatar, ColorAvatar, Switch, KpiCard, PageHead, Panel, ModalOverlay
     Primitives.test.tsx
     Sidebar.tsx               # sidebar fijo 240px — usa AuthContext para nombre/rol/iniciales
-    Topbar.tsx                # barra superior sticky con búsqueda, alertas, exportar
+    Topbar.tsx                # barra superior sticky con búsqueda, exportar
     Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover); ChartData admite fullLabels opcional
     Login.tsx                 # login real via AuthContext, validación, manejo de errores
   views/
     DashboardView.tsx         # KPIs reales: selector "Todas las sucursales"/individual + alcance "Mes"/"Todos los meses" (agrega vía obtenerComparativo) + gráfico dinámico de 6 meses
     ReportesView.tsx          # comparativo real + gráfico dinámico + export real, umbrales >90/60-90/<60
     InventoryView.tsx         # datos mock — sin endpoint BFF
-    UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search. Modal "Asignar sucursales" (AssignBranchesModal): toggle por sucursal → POST/DELETE asignación, enriquecido con nombres.
+    UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search. Acciones por fila: Editar (EditUserModal: nombre/apellido/email/telefono), Asignar sucursales (AssignBranchesModal: toggle por sucursal → POST/DELETE asignación, enriquecido con nombres), Ver detalle, Activar/Desactivar.
+    RolesView.tsx             # lista roles (ms-users vía BFF) + modal "Nuevo rol" (select de NombreRol enum + descripción opcional)
     BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre theme-aware con coords de la API. Botón "Cómo llegar" en BranchMap: geolocalización del navegador → ruta OSRM (router.project-osrm.org) dibujada como capa GeoJSON, con fallback a línea recta (haversine) si OSRM falla. La ruta se limpia al cambiar de sucursal y se re-pinta tras cambio de tema.
     ProductosView.tsx         # catálogo de productos (ms-datos): filtros sucursal/categoría/búsqueda (debounced); tabla código·nombre·categoría·sucursal·stock (resaltado si < mínimo)·precio·actualizado; botón "Importar JSON" (insert-only, muestra insertados/rechazados); "Nuevo producto" (modal); export PDF/Excel de inventario.
     ReportesGuardadosView.tsx # datos mock — sin endpoint BFF
-    ConfiguracionView.tsx     # perfil desde AuthContext; logout en tab Seguridad
+    ConfiguracionView.tsx     # solo tema oscuro/claro (sin tabs Perfil/Notificaciones/Seguridad — se eliminaron por no tener funcionalidad real; logout vive en Sidebar, no aquí)
 public/
   fonts/                      # Geist, Geist Mono, Inter (TTF, full weight range)
   assets/
@@ -456,8 +463,8 @@ public/
 Basado en el **Cordillera Design System** (`design-handoff/cordillera-design-system/`):
 - Paleta dark: `#0F0F0F` base → `#1A1A1A` sidebar → `#1E1E1E` cards → `#252525` hover
 - Fuentes: **Geist** (títulos) · **Inter** (cuerpo) · **Geist Mono** (números, KPIs, monospace)
-- Tema claro disponible vía `[data-theme="light"]` — se cambia desde Configuración → Interfaz
-- Densidad de datos: compact / normal / wide — se cambia desde Configuración → Interfaz
+- Tema claro disponible vía `[data-theme="light"]` — se cambia desde Configuración (única opción que quedó en esa vista)
+- Densidad de datos: compact / normal / wide — el mecanismo sigue en `PrefsContext` (`density`/`setDensity`, persiste en localStorage) pero ya no tiene control en la UI desde que se simplificó `ConfiguracionView`
 
 ### URLs de los servicios (desarrollo)
 
