@@ -60,12 +60,14 @@ Run all commands from within a service directory (e.g. `cd ms-users`). Use the w
 
 ```shell
 ./mvnw quarkus:dev            # Dev mode with live reload (Dev UI at /q/dev/)
-./mvnw test                   # Run unit tests (@QuarkusTest)
+./mvnw test                   # Run unit tests (@QuarkusTest + Mockito tests de la capa Service)
 ./mvnw verify                 # Unit + integration tests (*IT, via failsafe; skipITs=true by default)
 ./mvnw package                # Build → target/quarkus-app/quarkus-run.jar
 ./mvnw package -Dnative       # Native executable (needs GraalVM, or add -Dquarkus.native.container-build=true)
 java -jar target/quarkus-app/quarkus-run.jar
 ```
+
+`ms-auth` y `ms-users` además tienen un `package.json` mínimo con `npm run test` (wrapper de `mvnw test` + reporte de cobertura JaCoCo) — ver sección "Testing" más abajo.
 
 **ms-datos requiere flag extra** para evitar conflicto con Jenkins en el puerto de live-reload:
 ```shell
@@ -161,7 +163,7 @@ Conventions enforced across the codebase (mirror these when adding code):
 
 - ms-auth y ms-users usan `drop-and-create` + `import.sql` — el esquema **se destruye y recrea en cada arranque**. Solo para dev; cambiar a `update` antes de producción.
 - ms-datos usa Flyway (`migrate-at-start=true`, `generation=none`). ms-kpis también usa Flyway. **Para cambiar el esquema o los datos de ms-datos/ms-kpis hay que añadir una nueva migración `V#__*.sql` en `db/migration/` — NUNCA editar una migración ya aplicada** (Flyway valida el checksum y el arranque falla). Como las migraciones ya corrieron en los volúmenes Docker existentes, cualquier corrección a datos sembrados debe ir en una migración nueva con `UPDATE`/`TRUNCATE`+`INSERT`, no editando la vieja.
-- Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Tests use `quarkus-junit5` + `rest-assured`.
+- Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Los smoke tests `@QuarkusTest` (`*ResourceTest`) usan `quarkus-junit5` + `rest-assured` y necesitan la BD real; los tests unitarios de la capa Service (`*ServiceTest`) usan `quarkus-junit5-mockito` y no la necesitan — ver "Testing".
 
 #### Migraciones y datos semilla de ms-datos (`db/migration/`)
 
@@ -197,6 +199,43 @@ ms-users siembra 3 usuarios. ms-auth tiene el import.sql **vacío** — las cred
 | `d1111111-…`               | admin@cordillera.cl     | Admin1234!     | ADMIN   |
 | `e2222222-…`               | soporte@cordillera.cl   | Soporte1234!   | SOPORTE |
 | `f3333333-…`               | gerente@cordillera.cl   | Gerente1234!   | GERENTE |
+
+---
+
+## Testing
+
+### ms-auth y ms-users — unit tests de la capa Service (Mockito)
+
+Además de los smoke tests `@QuarkusTest` preexistentes (`AuthResourceTest`, `UsersResourceTest`, requieren la BD real), ambos servicios tienen tests unitarios de verdad sobre `service/`, mockeando los repositorios con Mockito (`quarkus-junit5-mockito`) — no arrancan CDI/Hibernate/datasource, corren en milisegundos sin BD:
+
+| Servicio  | Clases de test | Cobertura |
+|-----------|-----------------|-----------|
+| `ms-auth`  | `AuthServiceTest` (16 tests) | `registrar`, `login`, `refresh` (rotación de refresh token), `logout`, `cambiarEstado`, `validate` |
+| `ms-users` | `UsuarioServiceTest` (7), `RolServiceTest` (3), `UsuarioRolServiceTest` (3), `UsuarioSucursalServiceTest` (4) | CRUD, duplicados → 409, no-encontrado → 404, asignaciones usuario↔rol/sucursal |
+
+Ambos `pom.xml` tienen `jacoco-maven-plugin` (0.8.12) con el goal `report` ligado a la fase `test` — corre solo, sin pasos extra. Cada microservicio tiene además un `package.json` mínimo:
+
+```powershell
+npm run test              # = mvnw test → TODA la suite + reporte JaCoCo en target/site/jacoco/index.html
+.\mvnw.cmd test -Dtest=AuthServiceTest                                                        # ms-auth: solo el unit test, sin BD
+.\mvnw.cmd test -Dtest=UsuarioServiceTest,RolServiceTest,UsuarioRolServiceTest,UsuarioSucursalServiceTest  # ms-users: idem
+```
+
+> **`npm run test` corre todo, incluidos los smoke tests viejos.** Si la BD no está levantada, esos smoke tests fallan con `JDBCConnectionException` y Maven aborta el build *antes* de llegar al goal `jacoco:report` (no se genera el reporte). Con la BD arriba (`docker compose up -d` o `mvnw quarkus:dev`), todo pasa en verde y el reporte queda listo en el mismo paso — éste es el flujo esperado en desarrollo normal.
+
+### front — Vitest + React Testing Library
+
+No había ningún framework de testing instalado; se agregó Vitest + `@testing-library/react` + jsdom. 15 tests en 7 archivos: `utils/rut.test.ts`, `utils/periodo.test.ts`, `hooks/useDebounce.test.ts`, `api/client.test.ts`, `api/auth.test.ts`, `context/PrefsContext.test.tsx`, `components/Primitives.test.tsx`.
+
+```powershell
+npm test                  # vitest run — no necesita el BFF ni los microservicios levantados
+npm run test:coverage     # + reporte de cobertura (@vitest/coverage-v8) en front/coverage/ (HTML + lcov)
+```
+
+> **`front/vitest.config.ts` está separado de `vite.config.ts`** (no fusionado). El `vite@^8.0.12` ya fijado en el proyecto (build Rolldown) es incompatible a nivel de tipos con el `vite` que trae `vitest` como dependencia interna — fusionar el campo `test` en `vite.config.ts` rompía `npm run build` (`tsc -b`, error TS2769 en los tipos de `Plugin`). `vitest` detecta `vitest.config.ts` automáticamente con prioridad sobre `vite.config.ts`, así que ambos archivos coexisten sin conflicto.
+> **`front/src/test/setup.ts` incluye un polyfill de `localStorage`** en memoria (clase `MemoryStorage`). El Node de esta máquina expone un `localStorage` global nativo experimental que tapa el de jsdom y viene roto (objeto vacío, sin `getItem`/`setItem`/`clear`) — sin el polyfill, cualquier test que toque `localStorage` (p. ej. `PrefsContext`) falla con `TypeError`.
+
+**VSCode**: extensión **Vitest** (`vitest.explorer`) instalada y recomendada en `.vscode/extensions.json` — clic derecho sobre un archivo `*.test.ts(x)` → "Run Test with Coverage" (requiere `@vitest/coverage-v8`, ya en `devDependencies`).
 
 ---
 
@@ -328,9 +367,11 @@ VALUES (1, '2026-07', 15847263, 421, 37642.00, 18000000, 88.04, NOW());
 
 ```shell
 cd front
-npm install       # instalar dependencias
-npm run dev       # dev server → http://localhost:5173
-npm run build     # build de producción → dist/
+npm install         # instalar dependencias
+npm run dev         # dev server → http://localhost:5173
+npm run build       # build de producción → dist/
+npm test            # vitest run — ver sección "Testing" más arriba
+npm run test:coverage  # + reporte de cobertura en front/coverage/
 ```
 
 ### Estructura de `front/src/`
@@ -344,7 +385,9 @@ src/
   api/
     types.ts                  # interfaces TS: UsuarioDTO, SucursalDTO, RespuestaKpis, ProductoDTO, CategoriaProducto/CATEGORIAS, ImportResultado, etc.
     client.ts                 # fetch wrapper: Authorization header, auto-refresh en 401, AbortSignal
+    client.test.ts
     auth.ts                   # loginApi, logoutApi, refreshApi
+    auth.test.ts
     usuarios.ts               # listarUsuarios, crearUsuario, desactivarUsuario, activarUsuario
     sucursales.ts             # listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal
     kpis.ts                   # obtenerKpis, obtenerComparativo
@@ -353,14 +396,21 @@ src/
   context/
     AuthContext.tsx            # JWT en memoria, refreshToken en localStorage 'cord_rt', auto-restore al montar
     PrefsContext.tsx           # tema claro/oscuro + densidad, persiste en localStorage
+    PrefsContext.test.tsx
   hooks/
     useDebounce.ts            # debounce 350ms
+    useDebounce.test.ts
   utils/
     rut.ts                    # validarRut (módulo 11), formatearRut
+    rut.test.ts
     periodo.ts                # ultimosMeses(periodo, n) + tipo ChartSeries — serie de meses para gráficos
+    periodo.test.ts
+  test/
+    setup.ts                  # polyfill de localStorage (ver "Testing") + @testing-library/jest-dom
   components/
     Icon.tsx                  # wrapper de lucide-react con lookup por nombre kebab-case
     Primitives.tsx            # Badge, Delta, Button, Avatar, ColorAvatar, Switch, KpiCard, PageHead, Panel, ModalOverlay
+    Primitives.test.tsx
     Sidebar.tsx               # sidebar fijo 240px — usa AuthContext para nombre/rol/iniciales
     Topbar.tsx                # barra superior sticky con búsqueda, alertas, exportar
     Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover); ChartData admite fullLabels opcional

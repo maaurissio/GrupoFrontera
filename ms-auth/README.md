@@ -60,3 +60,17 @@ If you want to learn more about building native executables, please consult <htt
 Easily start your REST Web Services
 
 [Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+
+## Running the tests
+
+`AuthServiceTest` (16 tests) cubre la capa `service/` (`registrar`, `login`, `refresh`, `logout`, `cambiarEstado`, `validate`) mockeando `CredencialRepository`/`RefreshTokenRepository` con Mockito — no arranca CDI/Hibernate/datasource, así que corre sin la base de datos levantada.
+
+```shell script
+# Toda la suite (incluye AuthResourceTest, que SÍ necesita la BD real corriendo) + reporte de coverage JaCoCo
+npm run test
+
+# Solo el test unitario nuevo, sin necesitar la BD
+./mvnw test -Dtest=AuthServiceTest
+```
+
+`npm run test` ejecuta `mvnw test`, que además genera el reporte de cobertura (JaCoCo) automáticamente al finalizar — ábrelo en `target/site/jacoco/index.html`. Si la base de datos no está levantada (`docker compose up -d` o `mvnw quarkus:dev`), `AuthResourceTest` falla por falta de conexión y el build se detiene antes de generar el reporte; con la BD arriba, todo pasa y el reporte queda listo en el mismo paso.

@@ -1,0 +1,8 @@
+{
+  "name": "ms-auth",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test": ".\\mvnw.cmd test"
+  }
+}
