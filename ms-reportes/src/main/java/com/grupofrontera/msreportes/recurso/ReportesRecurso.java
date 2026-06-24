@@ -3,6 +3,7 @@ package com.grupofrontera.msreportes.recurso;
 import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
 import com.grupofrontera.msreportes.servicio.ExportacionServicio;
+import com.grupofrontera.msreportes.servicio.ReporteGeneradoService;
 import com.grupofrontera.msreportes.servicio.ReportesServicio;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -22,6 +23,9 @@ public class ReportesRecurso {
 
     @Inject
     ExportacionServicio exportacionServicio;
+
+    @Inject
+    ReporteGeneradoService reporteGeneradoService;
 
     @GET
     @Path("/dashboard")
@@ -73,12 +77,20 @@ public class ReportesRecurso {
                 .getOrDefault(sucursalId, "Sucursal " + sucursalId);
         String nombreArchivo = "reporte_sucursal" + sucursalId + "_" + periodo;
 
+        byte[] contenido;
+        String tipo;
         if (fmt.equals("pdf")) {
-            byte[] pdf = exportacionServicio.exportarPdf(dashboard, nombreSucursal);
-            return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
+            contenido = exportacionServicio.exportarPdf(dashboard, nombreSucursal);
+            tipo = "application/pdf";
+            nombreArchivo += ".pdf";
+        } else {
+            contenido = exportacionServicio.exportarExcel(dashboard, nombreSucursal);
+            tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            nombreArchivo += ".xlsx";
         }
-        byte[] xls = exportacionServicio.exportarExcel(dashboard, nombreSucursal);
-        return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
+        // Solo se registra en el historial una vez que el archivo se generó con exito.
+        reporteGeneradoService.registrar("KPIS", fmt, periodo, sucursalId, nombreSucursal);
+        return blob(contenido, tipo, nombreArchivo);
     }
 
     private Response exportarConsolidado(String fmt, String periodo) {
@@ -92,12 +104,19 @@ public class ReportesRecurso {
         var nombres = reportesServicio.obtenerNombresSucursales();
         String nombreArchivo = "reporte_consolidado_" + periodo;
 
+        byte[] contenido;
+        String tipo;
         if (fmt.equals("pdf")) {
-            byte[] pdf = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres);
-            return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
+            contenido = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres);
+            tipo = "application/pdf";
+            nombreArchivo += ".pdf";
+        } else {
+            contenido = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres);
+            tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            nombreArchivo += ".xlsx";
         }
-        byte[] xls = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres);
-        return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
+        reporteGeneradoService.registrar("KPIS", fmt, periodo, null, null);
+        return blob(contenido, tipo, nombreArchivo);
     }
 
     @GET
@@ -136,12 +155,19 @@ public class ReportesRecurso {
             nombreArchivo = "inventario_sucursal" + sucursalId;
         }
 
+        byte[] contenido;
+        String tipo;
         if (fmt.equals("pdf")) {
-            byte[] pdf = exportacionServicio.exportarInventarioPdf(productos, alcance, consolidado);
-            return blob(pdf, "application/pdf", nombreArchivo + ".pdf");
+            contenido = exportacionServicio.exportarInventarioPdf(productos, alcance, consolidado);
+            tipo = "application/pdf";
+            nombreArchivo += ".pdf";
+        } else {
+            contenido = exportacionServicio.exportarInventarioExcel(productos, alcance, consolidado);
+            tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            nombreArchivo += ".xlsx";
         }
-        byte[] xls = exportacionServicio.exportarInventarioExcel(productos, alcance, consolidado);
-        return blob(xls, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo + ".xlsx");
+        reporteGeneradoService.registrar("INVENTARIO", fmt, null, sucursalId, consolidado ? null : alcance);
+        return blob(contenido, tipo, nombreArchivo);
     }
 
     private Response blob(byte[] contenido, String tipo, String nombreArchivo) {

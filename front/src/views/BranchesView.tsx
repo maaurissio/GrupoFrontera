@@ -1,9 +1,22 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, ModalOverlay } from '../components/Primitives';
-import { listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal } from '../api/sucursales';
+import { listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal, listarUsuariosSucursal } from '../api/sucursales';
 import { listarRegiones, listarCiudades } from '../api/geografia';
+import { obtenerKpis } from '../api/kpis';
+import { listarProductos } from '../api/productos';
+import { useAuth } from '../context/AuthContext';
+import { puedeGestionarSucursales } from '../utils/permisos';
 import type { SucursalDTO, RegionDTO, CiudadDTO } from '../api/types';
+
+function currentPeriodo(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function fmtClp(n: number): string {
+  return '$' + Math.round(n).toLocaleString('es-CL');
+}
 
 declare const maplibregl: any;
 
@@ -100,7 +113,11 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
       : EMPTY_FC);
   }
 
-  function trazarRuta() {
+  function obtenerPosicion(options: PositionOptions): Promise<GeolocationPosition> {
+    return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+  }
+
+  async function trazarRuta() {
     if (!navigator.geolocation) {
       setRouteStatus('error');
       setRouteMsg('Tu navegador no permite geolocalización.');
@@ -108,46 +125,62 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
     }
     setRouteStatus('locating');
     setRouteMsg(null);
-    navigator.geolocation.getCurrentPosition(
-      async pos => {
-        const origin: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        const dest = coordsRef.current;
-        setRouteStatus('routing');
-        let coords: [number, number][];
-        let info: string;
-        try {
-          const url = `https://router.project-osrm.org/route/v1/driving/${origin[0]},${origin[1]};${dest[0]},${dest[1]}?overview=full&geometries=geojson`;
-          const res = await fetch(url);
-          const data = await res.json();
-          if (data.code === 'Ok' && data.routes?.[0]) {
-            coords = data.routes[0].geometry.coordinates as [number, number][];
-            const km = data.routes[0].distance / 1000;
-            const min = Math.round(data.routes[0].duration / 60);
-            info = `${km.toFixed(1)} km · ~${min} min en auto`;
-          } else {
-            throw new Error('sin ruta');
-          }
-        } catch {
-          coords = [origin, dest];
-          info = `${distanciaKm(origin, dest).toFixed(1)} km en línea recta (ruta no disponible)`;
-        }
-        routeRef.current = coords;
-        const map = mapRef.current;
-        if (map && readyRef.current) {
-          paintRoute(map);
-          const bounds = new maplibregl.LngLatBounds();
-          coords.forEach(c => bounds.extend(c));
-          map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 800 });
-        }
-        setRouteStatus('done');
-        setRouteMsg(info);
-      },
-      err => {
+
+    let pos: GeolocationPosition;
+    try {
+      // GPS/Wi-Fi de alta precisión primero (rápido en celulares).
+      pos = await obtenerPosicion({ enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+    } catch (err) {
+      if ((err as GeolocationPositionError).code === 1) {
         setRouteStatus('error');
-        setRouteMsg(err.code === 1 ? 'Permiso de ubicación denegado.' : 'No se pudo obtener tu ubicación.');
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-    );
+        setRouteMsg('Permiso de ubicación denegado.');
+        return;
+      }
+      try {
+        // Muchos PCs de escritorio no tienen GPS/Wi-Fi: reintenta con ubicación por red (menos precisa, más lenta).
+        pos = await obtenerPosicion({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+      } catch (err2) {
+        setRouteStatus('error');
+        setRouteMsg(
+          (err2 as GeolocationPositionError).code === 1
+            ? 'Permiso de ubicación denegado.'
+            : 'No se pudo obtener tu ubicación. Revisa que el servicio de ubicación esté activado en Windows (Configuración › Privacidad y seguridad › Ubicación).',
+        );
+        return;
+      }
+    }
+
+    const origin: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+    const dest = coordsRef.current;
+    setRouteStatus('routing');
+    let coords: [number, number][];
+    let info: string;
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${origin[0]},${origin[1]};${dest[0]},${dest[1]}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]) {
+        coords = data.routes[0].geometry.coordinates as [number, number][];
+        const km = data.routes[0].distance / 1000;
+        const min = Math.round(data.routes[0].duration / 60);
+        info = `${km.toFixed(1)} km · ~${min} min en auto`;
+      } else {
+        throw new Error('sin ruta');
+      }
+    } catch {
+      coords = [origin, dest];
+      info = `${distanciaKm(origin, dest).toFixed(1)} km en línea recta (ruta no disponible)`;
+    }
+    routeRef.current = coords;
+    const map = mapRef.current;
+    if (map && readyRef.current) {
+      paintRoute(map);
+      const bounds = new maplibregl.LngLatBounds();
+      coords.forEach(c => bounds.extend(c));
+      map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 800 });
+    }
+    setRouteStatus('done');
+    setRouteMsg(info);
   }
 
   function limpiarRuta() {
@@ -238,7 +271,11 @@ function BranchMap({ lat, lng }: { lat: number; lng: number }) {
   );
 }
 
-interface BranchFormData { nombre: string; ciudad: string; ciudadId: number | null; codigo: string; latitud: number | null; longitud: number | null }
+interface BranchFormData {
+  nombre: string; ciudad: string; ciudadId: number | null; codigo: string;
+  latitud: number | null; longitud: number | null;
+  direccion: string | null; anioApertura: number | null;
+}
 
 function BranchModal({ mode, data, onSave, onClose }: {
   mode: 'new' | 'edit';
@@ -252,6 +289,8 @@ function BranchModal({ mode, data, onSave, onClose }: {
   const [ciudadId, setCiudadId] = useState<number | ''>('');
   const [lat, setLat] = useState(data?.latitud != null ? String(data.latitud) : '');
   const [lng, setLng] = useState(data?.longitud != null ? String(data.longitud) : '');
+  const [direccion, setDireccion] = useState(data?.direccion ?? '');
+  const [anioApertura, setAnioApertura] = useState(data?.anioApertura != null ? String(data.anioApertura) : '');
   const [regiones, setRegiones] = useState<RegionDTO[]>([]);
   const [ciudades, setCiudades] = useState<CiudadDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -295,10 +334,19 @@ function BranchModal({ mode, data, onSave, onClose }: {
     if (latNum != null && (Number.isNaN(latNum) || latNum < -90 || latNum > 90)) { setError('La latitud debe estar entre -90 y 90.'); return; }
     if (lngNum != null && (Number.isNaN(lngNum) || lngNum < -180 || lngNum > 180)) { setError('La longitud debe estar entre -180 y 180.'); return; }
     if ((latNum == null) !== (lngNum == null)) { setError('Ingresa latitud y longitud, o deja ambas vacías.'); return; }
+    const anioNum = anioApertura.trim() === '' ? null : Number(anioApertura);
+    if (anioNum != null && (Number.isNaN(anioNum) || anioNum < 1900 || anioNum > new Date().getFullYear())) {
+      setError('El año de apertura no es válido.');
+      return;
+    }
     const ciudadNombre = ciudades.find(c => c.id === ciudadId)?.nombre ?? '';
     setLoading(true);
     try {
-      await onSave({ nombre: nombre.trim(), ciudad: ciudadNombre, ciudadId, codigo: codigo.trim(), latitud: latNum, longitud: lngNum });
+      await onSave({
+        nombre: nombre.trim(), ciudad: ciudadNombre, ciudadId, codigo: codigo.trim(),
+        latitud: latNum, longitud: lngNum,
+        direccion: direccion.trim() === '' ? null : direccion.trim(), anioApertura: anioNum,
+      });
     } catch {
       setError('Ha ocurrido un error. Intente más tarde.');
     } finally {
@@ -333,12 +381,14 @@ function BranchModal({ mode, data, onSave, onClose }: {
             </select>
           </div>
           <div className="field"><label className="field-label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="SUC-01" /></div>
+          <div className="field"><label className="field-label">Dirección</label><input className="input" value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Av. Libertador B. O'Higgins 1234" /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div className="field"><label className="field-label">Latitud</label><input className="input" value={lat} onChange={e => setLat(e.target.value)} placeholder="-33.4489" inputMode="decimal" /></div>
             <div className="field"><label className="field-label">Longitud</label><input className="input" value={lng} onChange={e => setLng(e.target.value)} placeholder="-70.6693" inputMode="decimal" /></div>
           </div>
+          <div className="field" style={{ maxWidth: 160 }}><label className="field-label">Año de apertura</label><input className="input" value={anioApertura} onChange={e => setAnioApertura(e.target.value)} placeholder="2018" inputMode="numeric" /></div>
           <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: -4 }}>
-            Latitud y longitud son opcionales — definen la ubicación exacta en el mapa.
+            Dirección, latitud/longitud y año de apertura son opcionales.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
@@ -463,12 +513,20 @@ function ConfirmBranchModal({ branch, onClose, onConfirm }: {
 }
 
 export function BranchesView() {
+  const { usuario } = useAuth();
+  const puedeEditar = puedeGestionarSucursales(usuario?.roles ?? []);
   const [branches, setBranches] = useState<SucursalDTO[]>([]);
   const [status, setStatus] = useState<'loading' | 'error' | 'ok'>('loading');
   const [sel, setSel] = useState(0);
   const [modal, setModal] = useState<{ mode: 'new' | 'edit'; data?: Partial<SucursalDTO> } | null>(null);
   const [confirm, setConfirm] = useState<SucursalDTO | null>(null);
   const [showAllMap, setShowAllMap] = useState(false);
+
+  // Detalle agregado de la sucursal seleccionada: jefe (ms-users), ventas del mes (ms-kpis)
+  // y productos bajo mínimo (ms-datos). undefined = cargando, null = sin datos/error.
+  const [jefe, setJefe] = useState<string | null | undefined>(undefined);
+  const [ventasMes, setVentasMes] = useState<number | null | undefined>(undefined);
+  const [bajoMinimo, setBajoMinimo] = useState<number | null | undefined>(undefined);
 
   const fetchBranches = useCallback(async () => {
     setStatus('loading');
@@ -489,6 +547,31 @@ export function BranchesView() {
   const fallback = b ? (COORDS[b.nombre] ?? null) : null;
   const lat = hasCoords ? (b!.latitud as number) : (fallback ? fallback.lat : DEFAULT_CENTER[1]);
   const lng = hasCoords ? (b!.longitud as number) : (fallback ? fallback.lng : DEFAULT_CENTER[0]);
+
+  useEffect(() => {
+    if (!b) return;
+    const ctrl = new AbortController();
+    setJefe(undefined);
+    setVentasMes(undefined);
+    setBajoMinimo(undefined);
+
+    listarUsuariosSucursal(b.id, ctrl.signal)
+      .then(asigs => {
+        const primero = [...asigs].sort((x, y) => x.asignadoEn.localeCompare(y.asignadoEn))[0];
+        setJefe(primero ? primero.nombreUsuario : null);
+      })
+      .catch(() => { if (!ctrl.signal.aborted) setJefe(null); });
+
+    obtenerKpis(b.id, currentPeriodo(), ctrl.signal)
+      .then(k => setVentasMes(k.totalVentas))
+      .catch(() => { if (!ctrl.signal.aborted) setVentasMes(null); });
+
+    listarProductos({ sucursalId: b.id, activo: true }, ctrl.signal)
+      .then(ps => setBajoMinimo(ps.filter(p => p.stock < p.stockMinimo).length))
+      .catch(() => { if (!ctrl.signal.aborted) setBajoMinimo(null); });
+
+    return () => ctrl.abort();
+  }, [b?.id]);
 
   async function handleSave(d: BranchFormData) {
     if (modal?.mode === 'new') {
@@ -541,9 +624,11 @@ export function BranchesView() {
           <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: 560 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--bg-border)' }}>
               <span className="ds-h3">Sucursales</span>
-              <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={() => setModal({ mode: 'new' })}>
-                <Icon name="plus" size={14} />Nueva
-              </button>
+              {puedeEditar && (
+                <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={() => setModal({ mode: 'new' })}>
+                  <Icon name="plus" size={14} />Nueva
+                </button>
+              )}
             </div>
             {status === 'loading' ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -589,31 +674,59 @@ export function BranchesView() {
               </button>
             )}
             {b && (
-              <div style={{ position: 'absolute', top: 16, left: 16, width: 280, background: 'rgba(26,26,26,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--bg-border-strong)', borderRadius: 12, padding: 16, boxShadow: 'var(--shadow-pop)' }}>
+              <div style={{ position: 'absolute', top: 16, left: 16, width: 300, background: 'rgba(26,26,26,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--bg-border-strong)', borderRadius: 12, padding: 16, boxShadow: 'var(--shadow-pop)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <div>
-                    <div className="ds-h3" style={{ fontSize: 16 }}>{b.nombre}</div>
-                    <div className="ds-label" style={{ fontSize: 11, marginTop: 2 }}>{b.ciudad} {b.codigo ? `· ${b.codigo}` : ''}</div>
-                  </div>
-                  <Badge kind={b.habilitada ? 'success' : 'neutral'}>{b.habilitada ? 'Activa' : 'Inactiva'}</Badge>
+                  <div className="ds-h3" style={{ fontSize: 17 }}>{b.nombre}</div>
+                  <Badge kind={b.habilitada ? 'success' : 'neutral'}>{b.habilitada ? 'Operativo' : 'Inactiva'}</Badge>
                 </div>
-                <div style={{ height: 1, background: 'var(--bg-border)', margin: '14px 0' }} />
+                <div className="ds-sm" style={{ marginTop: 4 }}>{b.direccion || `${b.ciudad}${b.codigo ? ` · ${b.codigo}` : ''}`}</div>
                 {!hasCoords && !COORDS[b.nombre] && (
-                  <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginBottom: 10 }}>
-                    Coordenadas no disponibles — mostrando centro por defecto. Edita la sucursal para fijarlas.
+                  <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: 6 }}>
+                    Coordenadas no disponibles — mostrando centro por defecto.
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => setModal({ mode: 'edit', data: b })}>
-                    <Icon name="pencil" size={14} />Editar
-                  </button>
-                  <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: b.habilitada ? 'var(--color-danger)' : 'var(--color-success)' }}
-                    onClick={() => setConfirm(b)}>
-                    <Icon name={b.habilitada ? 'toggle-left' : 'toggle-right'} size={14} />
-                    {b.habilitada ? 'Desactivar' : 'Activar'}
-                  </button>
+                <div style={{ height: 1, background: 'var(--bg-border)', margin: '14px 0' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <div className="ds-label" style={{ fontSize: 11 }}>Ciudad</div>
+                    <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: 2 }}>{b.ciudad}</div>
+                  </div>
+                  <div>
+                    <div className="ds-label" style={{ fontSize: 11 }}>Apertura</div>
+                    <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: 2 }}>{b.anioApertura ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div className="ds-label" style={{ fontSize: 11 }}>Jefe</div>
+                    <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: 2 }}>
+                      {jefe === undefined ? '…' : jefe ?? 'Sin asignar'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="ds-label" style={{ fontSize: 11 }}>Ventas del mes</div>
+                    <div className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: 2 }}>
+                      {ventasMes === undefined ? '…' : ventasMes == null ? 'Sin datos' : fmtClp(ventasMes)}
+                    </div>
+                  </div>
                 </div>
+                <div style={{ marginTop: 12 }}>
+                  <div className="ds-label" style={{ fontSize: 11 }}>Stock</div>
+                  <div className="ds-sm" style={{ fontWeight: 600, marginTop: 2, color: bajoMinimo ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                    {bajoMinimo === undefined ? '…' : bajoMinimo == null ? 'Sin datos' : bajoMinimo === 0 ? 'OK' : `${bajoMinimo} bajo mínimo`}
+                  </div>
+                </div>
+                {puedeEditar && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                    <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      onClick={() => setModal({ mode: 'edit', data: b })}>
+                      <Icon name="pencil" size={14} />Editar
+                    </button>
+                    <button className="btn btn-secondary btn-icon btn-sm" title={b.habilitada ? 'Desactivar sucursal' : 'Activar sucursal'}
+                      style={{ color: b.habilitada ? 'var(--color-danger)' : 'var(--color-success)' }}
+                      onClick={() => setConfirm(b)}>
+                      <Icon name={b.habilitada ? 'trash-2' : 'rotate-ccw'} size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

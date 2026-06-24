@@ -1,6 +1,7 @@
 package com.grupofrontera.bff.resource;
 
 import com.grupofrontera.bff.client.DatosClient;
+import com.grupofrontera.bff.client.UsersClient;
 import com.grupofrontera.bff.dto.EstadoDTO;
 import com.grupofrontera.bff.dto.SucursalDTO;
 import com.grupofrontera.bff.dto.SucursalRequestDTO;
@@ -26,6 +27,10 @@ public class SucursalResource {
     @Inject
     @RestClient
     DatosClient datosClient;
+
+    @Inject
+    @RestClient
+    UsersClient usersClient;
 
     @POST
     public Response crear(@Valid SucursalRequestDTO request) {
@@ -53,5 +58,12 @@ public class SucursalResource {
     @Path("/{id}/estado")
     public SucursalDTO cambiarEstado(@PathParam("id") Long id, @Valid EstadoDTO request) {
         return datosClient.cambiarEstadoSucursal(id, request);
+    }
+
+    // Direccion inversa de /api/bff/usuarios/{id}/sucursales: usuarios asignados a una sucursal.
+    @GET
+    @Path("/{id}/usuarios")
+    public List<Object> listarUsuarios(@PathParam("id") Long id) {
+        return usersClient.listarUsuariosPorSucursal(id);
     }
 }

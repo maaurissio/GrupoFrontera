@@ -41,6 +41,8 @@ public class SucursalService {
         sucursal.ciudadId = datos.ciudadId;
         sucursal.latitud = datos.latitud;
         sucursal.longitud = datos.longitud;
+        sucursal.direccion = datos.direccion;
+        sucursal.anioApertura = datos.anioApertura;
         sucursal.updatedAt = LocalDateTime.now();
         sucursal.persist();
         return sucursal;

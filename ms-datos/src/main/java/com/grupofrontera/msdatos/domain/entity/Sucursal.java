@@ -45,6 +45,12 @@ public class Sucursal extends PanacheEntityBase {
     @Column(name = "ciudad_id")
     public Long ciudadId;
 
+    @Column(name = "direccion", length = 250)
+    public String direccion;
+
+    @Column(name = "anio_apertura")
+    public Integer anioApertura;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     public LocalDateTime createdAt;
 

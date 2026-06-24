@@ -18,4 +18,8 @@ public class SucursalRequestDTO {
     public Double latitud;
 
     public Double longitud;
+
+    public String direccion;
+
+    public Integer anioApertura;
 }

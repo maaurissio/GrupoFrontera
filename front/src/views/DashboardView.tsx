@@ -8,6 +8,8 @@ import { listarSucursales } from '../api/sucursales';
 import { obtenerComparativo } from '../api/kpis';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
 import { ultimosMeses, type ChartSeries } from '../utils/periodo';
+import { useAuth } from '../context/AuthContext';
+import { puedeVerUsuariosYRoles } from '../utils/permisos';
 
 function currentPeriodo(): string {
   const now = new Date();
@@ -139,6 +141,8 @@ type Scope = 'mes' | 'todos';
 type Status = 'idle' | 'loading' | 'error' | 'nodata';
 
 export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void }) {
+  const { usuario } = useAuth();
+  const modulos = DATA.modules.filter(m => m.id === 'usuarios' ? puedeVerUsuariosYRoles(usuario?.roles ?? []) : true);
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
   const [sucursalSel, setSucursalSel] = useState<number | 'all'>('all');
   const [scope, setScope] = useState<Scope>('mes');
@@ -357,7 +361,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
         </Panel>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start' }}>
-          {DATA.modules.map(m => (
+          {modulos.map(m => (
             <button key={m.id} onClick={() => onNavigate?.(m.route as ViewId)} className="card card-hover"
               style={{ padding: 16, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, border: '1px solid var(--bg-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

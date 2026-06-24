@@ -48,6 +48,8 @@ export interface SucursalDTO {
   habilitada: boolean;
   latitud?: number | null;
   longitud?: number | null;
+  direccion?: string | null;
+  anioApertura?: number | null;
 }
 
 // Asignación usuario↔sucursal (ms-users); el BFF agrega `sucursalNombre`.
@@ -170,6 +172,20 @@ export interface SucursalCreatePayload {
   ciudadId?: number | null;
   latitud?: number | null;
   longitud?: number | null;
+  direccion?: string | null;
+  anioApertura?: number | null;
+}
+
+// Historial real de reportes generados (ms-reportes); cada export exitoso crea una fila.
+export interface ReporteGeneradoDTO {
+  id: number;
+  tipo: 'KPIS' | 'INVENTARIO';
+  formato: 'PDF' | 'XLSX';
+  periodo: string | null;
+  sucursalId: number | null;
+  sucursalNombre: string | null;
+  favorito: boolean;
+  fechaGeneracion: string;
 }
 
 export class ApiError extends Error {

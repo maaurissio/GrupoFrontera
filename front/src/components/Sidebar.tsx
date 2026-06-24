@@ -1,6 +1,7 @@
 import { Icon } from './Icon';
 import { DATA } from '../data';
 import { useAuth } from '../context/AuthContext';
+import { puedeVerUsuariosYRoles } from '../utils/permisos';
 import type { ViewId } from '../data';
 
 interface SidebarProps {
@@ -14,6 +15,8 @@ export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
   const displayName = usuario ? `${usuario.nombre} ${usuario.apellido}`.trim() : '—';
   const rol = (usuario?.roles ?? [])[0] ?? '';
   const initials = usuario ? ((usuario.nombre[0] ?? '') + (usuario.apellido[0] ?? '')).toUpperCase() : '—';
+  const verUsuariosYRoles = puedeVerUsuariosYRoles(usuario?.roles ?? []);
+  const navItems = DATA.nav.filter(item => (item.id === 'usuarios' || item.id === 'roles') ? verUsuariosYRoles : true);
 
   return (
     <aside style={{
@@ -27,7 +30,7 @@ export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
 
       <nav style={{ padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 2, flex: 1, overflowY: 'auto' }}>
         <div className="ds-eyebrow" style={{ padding: '6px 10px 8px' }}>Monitoreo</div>
-        {DATA.nav.map((item) => {
+        {navItems.map((item) => {
           const on = active === item.id;
           return (
             <button
@@ -59,6 +62,23 @@ export function Sidebar({ active, onNavigate, onLogout }: SidebarProps) {
         })}
 
         <div className="ds-eyebrow" style={{ padding: '18px 10px 8px' }}>Sistema</div>
+        {(() => {
+          const on = active === 'reportesGuardados';
+          return (
+            <button onClick={() => onNavigate('reportesGuardados')} style={{
+              display: 'flex', alignItems: 'center', gap: 11, padding: '9px 10px',
+              borderRadius: 8, border: 'none', cursor: 'pointer', textAlign: 'left',
+              background: on ? 'var(--bg-surface-3)' : 'transparent',
+              color: on ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: on ? 500 : 400,
+            }}
+              onMouseEnter={e => { if (!on) { (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface-2)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; } }}
+              onMouseLeave={e => { if (!on) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; } }}
+            >
+              <Icon name="file-text" size={18} /> Reportes guardados
+            </button>
+          );
+        })()}
         {(() => {
           const on = active === 'configuracion';
           return (

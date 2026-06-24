@@ -12,6 +12,8 @@ public class SucursalDTO {
     public Boolean habilitada;
     public Double latitud;
     public Double longitud;
+    public String direccion;
+    public Integer anioApertura;
     public LocalDateTime createdAt;
     public LocalDateTime updatedAt;
 }

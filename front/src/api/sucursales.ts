@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { SucursalDTO, SucursalCreatePayload } from './types';
+import type { SucursalDTO, SucursalCreatePayload, AsignacionSucursalDTO } from './types';
 
 export function listarSucursales(signal?: AbortSignal): Promise<SucursalDTO[]> {
   return apiFetch<SucursalDTO[]>('/api/bff/sucursales', {}, signal);
@@ -29,4 +29,9 @@ export function cambiarEstadoSucursal(id: number, habilitada: boolean): Promise<
     method: 'PUT',
     body: JSON.stringify({ activo: habilitada }),
   });
+}
+
+// Direccion inversa de listarSucursalesUsuario (api/usuarios.ts): usuarios asignados a esta sucursal.
+export function listarUsuariosSucursal(sucursalId: number, signal?: AbortSignal): Promise<AsignacionSucursalDTO[]> {
+  return apiFetch<AsignacionSucursalDTO[]>(`/api/bff/sucursales/${sucursalId}/usuarios`, {}, signal);
 }

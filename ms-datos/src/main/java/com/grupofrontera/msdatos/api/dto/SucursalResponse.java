@@ -13,6 +13,8 @@ public class SucursalResponse {
     public Boolean habilitada;
     public Double latitud;
     public Double longitud;
+    public String direccion;
+    public Integer anioApertura;
     public LocalDateTime createdAt;
     public LocalDateTime updatedAt;
 
@@ -26,6 +28,8 @@ public class SucursalResponse {
         r.habilitada = sucursal.habilitada;
         r.latitud = sucursal.latitud;
         r.longitud = sucursal.longitud;
+        r.direccion = sucursal.direccion;
+        r.anioApertura = sucursal.anioApertura;
         r.createdAt = sucursal.createdAt;
         r.updatedAt = sucursal.updatedAt;
         return r;

@@ -1,4 +1,14 @@
 export const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+export const MESES_LARGOS = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+// "2026-06" -> "Junio 2026"
+export function formatearPeriodo(periodo: string): string {
+  const [y, m] = periodo.split('-').map(Number);
+  return `${MESES_LARGOS[m - 1]} ${y}`;
+}
 
 export interface SerieMes { periodo: string; corto: string; full: string }
 

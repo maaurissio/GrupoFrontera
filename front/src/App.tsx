@@ -11,33 +11,42 @@ import { RolesView } from './views/RolesView';
 import { BranchesView } from './views/BranchesView';
 import { ConfiguracionView } from './views/ConfiguracionView';
 import { ProductosView } from './views/ProductosView';
+import { ReportesGuardadosView } from './views/ReportesGuardadosView';
+import { puedeVerUsuariosYRoles } from './utils/permisos';
 import type { ViewId } from './data';
 
 const TITLES: Record<ViewId, string> = {
-  dashboard:     'Resumen',
-  reportes:      'Reportes',
-  usuarios:      'Usuarios',
-  roles:         'Roles',
-  sucursales:    'Sucursales',
-  configuracion: 'Configuración',
-  productos:     'Catálogo de productos',
+  dashboard:         'Resumen',
+  reportes:          'Reportes',
+  usuarios:          'Usuarios',
+  roles:             'Roles',
+  sucursales:        'Sucursales',
+  configuracion:     'Configuración',
+  productos:         'Catálogo de productos',
+  reportesGuardados: 'Reportes guardados',
 };
 
 const SUBTITLES: Record<ViewId, string> = {
-  dashboard:     'Estado operacional en tiempo real · Grupo Cordillera',
-  reportes:      'KPIs por sucursal y período · exportables',
-  usuarios:      'Roles, sucursales y estado de cuentas',
-  roles:         'Roles del sistema y sus permisos',
-  sucursales:    'Red de sucursales · ubicación y cobertura',
-  configuracion: 'Preferencias del sistema y tu cuenta',
-  productos:     'Inventario por sucursal · stock y precios',
+  dashboard:         'Estado operacional en tiempo real · Grupo Cordillera',
+  reportes:          'KPIs por sucursal y período · exportables',
+  usuarios:          'Roles, sucursales y estado de cuentas',
+  roles:             'Roles del sistema y sus permisos',
+  sucursales:        'Red de sucursales · ubicación y cobertura',
+  configuracion:     'Preferencias del sistema y tu cuenta',
+  productos:         'Inventario por sucursal · stock y precios',
+  reportesGuardados: 'Historial, favoritos y reportes programados',
 };
 
 function AppShell() {
-  const { logout } = useAuth();
+  const { logout, usuario } = useAuth();
   const [view, setView] = useState<ViewId>('dashboard');
   const [exporting, setExporting] = useState(false);
   const scrollRef = useRef<HTMLElement>(null);
+
+  // Defensa en profundidad: aunque el Sidebar ya oculta Usuarios/Roles, esto bloquea
+  // el acceso aunque se llegue por otro camino (p.ej. las tarjetas de módulo del Dashboard).
+  const vistaRestringida = (view === 'usuarios' || view === 'roles') && !puedeVerUsuariosYRoles(usuario?.roles ?? []);
+  const vista = vistaRestringida ? 'dashboard' : view;
 
   const navigate = (v: ViewId) => {
     setView(v);
@@ -45,7 +54,7 @@ function AppShell() {
   };
 
   const renderView = () => {
-    switch (view) {
+    switch (vista) {
       case 'dashboard':     return <DashboardView onNavigate={navigate} />;
       case 'reportes':      return <ReportesView />;
       case 'usuarios':      return <UsersView />;
@@ -53,16 +62,17 @@ function AppShell() {
       case 'sucursales':    return <BranchesView />;
       case 'configuracion': return <ConfiguracionView />;
       case 'productos':     return <ProductosView />;
+      case 'reportesGuardados': return <ReportesGuardadosView />;
       default:              return <DashboardView onNavigate={navigate} />;
     }
   };
 
   const headerActions = () => {
-    if (view === 'usuarios') return null;
-    if (view === 'roles') return null;
-    if (view === 'sucursales') return <Button variant="secondary" icon="map">Ver todas en el mapa</Button>;
-    if (view === 'reportes') return null;
-    if (view === 'productos') return null;
+    if (vista === 'usuarios') return null;
+    if (vista === 'roles') return null;
+    if (vista === 'sucursales') return <Button variant="secondary" icon="map">Ver todas en el mapa</Button>;
+    if (vista === 'reportes') return null;
+    if (vista === 'productos') return null;
     return (
       <>
         <Button variant="secondary" icon="filter">Filtros</Button>
@@ -73,11 +83,11 @@ function AppShell() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar active={view} onNavigate={navigate} onLogout={logout} />
+      <Sidebar active={vista} onNavigate={navigate} onLogout={logout} />
       <main ref={scrollRef} className="ds-scroll" style={{ flex: 1, overflowY: 'auto', height: '100%', position: 'relative' }}>
-        <Topbar title={TITLES[view]} onExport={() => setExporting(true)} />
+        <Topbar title={TITLES[vista]} onExport={() => setExporting(true)} />
         <div style={{ padding: '28px 28px 48px' }}>
-          <PageHead title={TITLES[view]} subtitle={SUBTITLES[view]}>
+          <PageHead title={TITLES[vista]} subtitle={SUBTITLES[vista]}>
             {headerActions()}
           </PageHead>
           {renderView()}

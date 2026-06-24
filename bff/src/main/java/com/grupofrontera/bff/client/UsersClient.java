@@ -59,6 +59,9 @@ public interface UsersClient {
     @GET @Path("/usuario-sucursales/usuario/{usuarioId}")
     List<Object> listarSucursalesPorUsuario(@PathParam("usuarioId") UUID usuarioId);
 
+    @GET @Path("/usuario-sucursales/sucursal/{sucursalId}")
+    List<Object> listarUsuariosPorSucursal(@PathParam("sucursalId") Long sucursalId);
+
     @POST @Path("/usuario-sucursales")
     Response asignarSucursal(Object request);
 

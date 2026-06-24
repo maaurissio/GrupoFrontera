@@ -34,6 +34,11 @@ export const DATA = {
     { id: "roles",      label: "Roles",     icon: "shield" },
     { id: "sucursales", label: "Sucursales", icon: "map-pin" },
   ],
+
+  branchNames: [
+    "Santiago Centro", "Providencia", "Valparaíso",
+    "Viña del Mar", "Concepción", "Talcahuano",
+  ],
 };
 
-export type ViewId = "dashboard" | "reportes" | "usuarios" | "roles" | "sucursales" | "configuracion" | "productos";
+export type ViewId = "dashboard" | "reportes" | "usuarios" | "roles" | "sucursales" | "configuracion" | "productos" | "reportesGuardados";

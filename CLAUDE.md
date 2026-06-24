@@ -16,9 +16,9 @@ Each top-level directory is a self-contained project (its own `pom.xml`, `mvnw`,
 | `ms-auth`     | Authentication & JWT         | **Fully implemented** — JWT HS384, BCrypt, refresh tokens |
 | `ms-datos`    | Catálogo de productos        | **Fully implemented** — Flyway, catálogo geográfico, 4 sucursales + 48 productos semilla, import JSON |
 | `ms-kpis`     | KPI computation              | **Fully implemented** — Flyway, consume RabbitMQ, 96 KPIs semilla (4 suc × 12 meses) |
-| `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI): reporte de KPIs **y de inventario de productos** |
+| `ms-reportes` | Reporting                    | **Fully implemented** — puerto 8087, exportación PDF (OpenPDF) + Excel (Apache POI): reporte de KPIs **y de inventario de productos**. Desde V1 tiene **BD propia** (Postgres + Flyway) para el historial real de reportes generados (`reporte_generado`) |
 | `bff`         | Backend-for-frontend         | **Fully implemented** — integra todos los microservicios |
-| `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 9 vistas      |
+| `front`       | Frontend React + Vite + TS   | **Fully implemented** — conectado al BFF, 8 vistas      |
 
 Java package convention: `com.grupofrontera.ms<name>` (e.g. `com.grupofrontera.msusers`). `groupId` is `com.grupofrontera`. Note: `ms-users/contexto_ms_users.md` documents the original design but is **stale on two points** — the real package is `com.grupofrontera.*` (not `cl.duoc.cordillera`) and the Quarkus platform version in `pom.xml` is `3.36.0` (not 3.34.5). Trust the code/POM over that doc.
 
@@ -34,7 +34,7 @@ Esta máquina tiene servicios Windows que ocupan puertos por defecto. Los puerto
 | `ms-users`  | **8085** ⚠️ | 5434             | db_users            | users_db                 |
 | `ms-datos`  | **8089** ⚠️ | **5437** ⚠️      | grupofrontera       | datos_db                 |
 | `ms-kpis`   | **8086**    | 5438             | kpis_db             | kpis_db                  |
-| `ms-reportes` | **8087**  | —                | —                   | —                        |
+| `ms-reportes` | **8087**  | **5439**         | db_reportes         | reportes_db              |
 | `bff`       | **8090**    | —                | —                   | —                        |
 | `front`     | **5173**    | —                | —                   | —                        |
 
@@ -95,13 +95,14 @@ docker compose up -d ms-datos bff front
 ```
 
 Contenedores: `gf_ms_auth`, `gf_ms_users`, `gf_ms_datos`, `gf_ms_kpis`, `gf_ms_reportes`, `gf_bff`,
-`gf_front`, más las BDs `gf_auth_db`, `gf_users_db`, `gf_datos_db`, `gf_kpis_db` y `gf_rabbitmq`.
+`gf_front`, más las BDs `gf_auth_db`, `gf_users_db`, `gf_datos_db`, `gf_kpis_db`, `gf_reportes_db` y `gf_rabbitmq`.
 Todas las BDs usan `postgres`/`postgres`. Inspeccionar una BD:
 `docker exec gf_datos_db psql -U postgres -d datos_db -c "SELECT ..."`.
 
-> **Migraciones Flyway al arrancar**: ms-datos y ms-kpis aplican sus migraciones automáticamente
-> (`migrate-at-start=true`). Las semillas son parte de las migraciones, así que **ambos servicios quedan
-> poblados solos** con una BD nueva — sin pasos manuales. Ver "Database notes" para el detalle de los seeds.
+> **Migraciones Flyway al arrancar**: ms-datos, ms-kpis y ms-reportes aplican sus migraciones automáticamente
+> (`migrate-at-start=true`). Las semillas son parte de las migraciones, así que **ms-datos y ms-kpis quedan
+> poblados solos** con una BD nueva — sin pasos manuales (ms-reportes no siembra nada, su tabla
+> `reporte_generado` arranca vacía y se llena sola con cada export real). Ver "Database notes" para el detalle.
 
 #### Modo B — dev local con `mvnw` (live reload por servicio)
 
@@ -109,21 +110,23 @@ Levanta solo la infra en Docker y corre cada microservicio con `mvnw quarkus:dev
 
 ```powershell
 # 1. Solo infraestructura
-docker compose up -d auth-db users-db datos-db kpis-db rabbitmq
+docker compose up -d auth-db users-db datos-db kpis-db reportes-db rabbitmq
 
-# 2–6. Cada servicio en su propia terminal PowerShell
-cd ms-auth   && .\mvnw.cmd quarkus:dev   # terminal 1
-cd ms-users  && .\mvnw.cmd quarkus:dev   # terminal 2
-cd ms-datos  && .\mvnw.cmd quarkus:dev -Dquarkus.live-reload.port=8193  # terminal 3 (evita choque con Jenkins)
-cd ms-kpis   && .\mvnw.cmd quarkus:dev   # terminal 4
-cd bff       && .\mvnw.cmd quarkus:dev   # terminal 5
-cd front     && npm run dev              # terminal 6
+# 2–7. Cada servicio en su propia terminal PowerShell
+cd ms-auth     && .\mvnw.cmd quarkus:dev   # terminal 1
+cd ms-users    && .\mvnw.cmd quarkus:dev   # terminal 2
+cd ms-datos    && .\mvnw.cmd quarkus:dev -Dquarkus.live-reload.port=8193  # terminal 3 (evita choque con Jenkins)
+cd ms-kpis     && .\mvnw.cmd quarkus:dev   # terminal 4
+cd ms-reportes && .\mvnw.cmd quarkus:dev   # terminal 5
+cd bff         && .\mvnw.cmd quarkus:dev   # terminal 6
+cd front       && npm run dev              # terminal 7
 ```
 
-> ⚠️ En modo B los nombres de BD del `application.properties` (`db_auth`, `db_users`, `grupofrontera`)
-> NO coinciden con los que crea docker-compose (`auth_db`, `users_db`, `datos_db`). Si levantas la infra
-> con docker-compose y los ms con `mvnw`, ms-datos buscará `grupofrontera` y fallará: o creas esa BD a mano,
-> o defines la env var `DB_URL` apuntando a `datos_db`.
+> ⚠️ En modo B los nombres de BD del `application.properties` (`db_auth`, `db_users`, `grupofrontera`, `db_reportes`)
+> NO coinciden con los que crea docker-compose (`auth_db`, `users_db`, `datos_db`, `reportes_db`). Si levantas la infra
+> con docker-compose y los ms con `mvnw`, ms-datos buscará `grupofrontera` y ms-reportes buscará `db_reportes`,
+> y ambos fallarán: o creas esas BDs a mano, o defines la env var `DB_URL` apuntando al nombre real
+> (`datos_db` / `reportes_db`).
 
 #### Credenciales de ms-auth (ambos modos)
 
@@ -163,7 +166,7 @@ Conventions enforced across the codebase (mirror these when adding code):
 
 - ms-auth y ms-users usan `drop-and-create` + `import.sql` — el esquema **se destruye y recrea en cada arranque**. Solo para dev; cambiar a `update` antes de producción.
 - ms-datos usa Flyway (`migrate-at-start=true`, `generation=none`). ms-kpis también usa Flyway. **Para cambiar el esquema o los datos de ms-datos/ms-kpis hay que añadir una nueva migración `V#__*.sql` en `db/migration/` — NUNCA editar una migración ya aplicada** (Flyway valida el checksum y el arranque falla). Como las migraciones ya corrieron en los volúmenes Docker existentes, cualquier corrección a datos sembrados debe ir en una migración nueva con `UPDATE`/`TRUNCATE`+`INSERT`, no editando la vieja.
-- Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Los smoke tests `@QuarkusTest` (`*ResourceTest`) usan `quarkus-junit5` + `rest-assured` y necesitan la BD real; los tests unitarios de la capa Service (`*ServiceTest`) usan `quarkus-junit5-mockito` y no la necesitan — ver "Testing".
+- Stack: PostgreSQL 16, Hibernate ORM + Panache, `quarkus-rest` + `quarkus-rest-jackson`, `quarkus-hibernate-validator`, `quarkus-smallrye-openapi`. Los smoke tests `@QuarkusTest` (`*ResourceTest`) de ms-datos/ms-users usan `quarkus-junit5` + `rest-assured` y necesitan la BD real; los tests unitarios de la capa Service (`*ServiceTest`) usan `quarkus-junit5-mockito` y no la necesitan — ver "Testing". **ms-kpis y ms-reportes son la excepción**: sus `*ResourceTest` corren sobre **H2 en memoria** (`%test.quarkus.datasource.db-kind=h2`, `quarkus.hibernate-orm.database.generation=drop-and-create`, `quarkus.flyway.enabled=false` solo en el perfil `%test`), así que `mvnw test` pasa sin Postgres real en esos dos servicios.
 
 #### Migraciones y datos semilla de ms-datos (`db/migration/`)
 
@@ -176,8 +179,11 @@ Conventions enforced across the codebase (mirror these when adding code):
 | `V5__naturalizar_montos.sql` | reescribe los montos del JSON de V4 para que no terminen en `000` |
 | `V6__rehacer_sucursales_y_5000_datos.sql` | **reemplaza las 3 sucursales por 4** (ids 1–4: Don Raucho/Angol, Jurel San Jose/Coronel, Hogar Central/Santiago, TecnoSur/Puerto Montt) y **regenera 5000 datos** con valores naturales (no terminados en 000) — **eliminados por V7** |
 | `V7__productos_y_drop_datos.sql` | **elimina las tablas `dato_consolidado` y `log_trazabilidad`** (los 5000 datos) y crea la tabla **`producto`** (`codigo`, `nombre`, `sucursal_id` FK real, `categoria` enum, `stock`, `stock_minimo`, `precio`, `fecha_actualizacion_stock`, `activo`; UNIQUE `(codigo, sucursal_id)`) + **48 productos semilla** (12 por sucursal × las 8 categorías, precios naturales, algunos bajo mínimo) |
+| `V8__sucursal_direccion_apertura.sql` | agrega `direccion` (VARCHAR 250) y `anio_apertura` (INT) a `sucursal`, ambos opcionales y sin seed — las 4 sucursales existentes quedan en NULL hasta que se editen desde el modal del front |
 
 > **Dominio Producto (V7 en adelante).** El antiguo dominio "datos consolidados" (entidad `DatoConsolidado`, `LogTrazabilidad`, enum `EstadoDato`, sus DTOs/resource/service) fue **eliminado**. ms-datos ahora expone **`/api/v1/productos`** (CRUD + filtros `sucursalId`/`categoria`/`q`/`activo`, `POST /importar` insert-only, `GET /categorias`). `Fuente`/`Sucursal`/`Region`/`Ciudad` se mantienen sin cambios. La categoría es un enum: `ELECTRODOMESTICO, TV, MOVIL, CONSOLA, COMPUTACION, AUDIO, ACCESORIO, OTRO`.
+>
+> **Campos de sucursal post-V8**: `direccion`/`anioApertura` viajan en `SucursalRequest`/`SucursalResponse` y en el BFF (`SucursalRequestDTO`/`SucursalDTO`); el front los edita en `BranchModal` y los muestra en la tarjeta de detalle de `BranchesView`.
 
 #### Migraciones y datos semilla de ms-kpis (`db/migration/`)
 
@@ -189,6 +195,20 @@ Conventions enforced across the codebase (mirror these when adding code):
 | `V4__kpis_4_sucursales.sql` | **regenera para las 4 sucursales** (ids 1–4): 48 + 48 indicadores generados por SQL (factor estacional + jitter natural) |
 
 - Los KPIs también se recalculan en vivo desde eventos RabbitMQ (`venta.realizada`, `actualizacion.stock`); el seed solo garantiza que el dashboard tenga datos desde el primer arranque.
+
+#### Migraciones de ms-reportes (`db/migration/`)
+
+| Versión | Contenido |
+|---------|-----------|
+| `V1__reporte_generado.sql` | tabla **`reporte_generado`** (`tipo` KPIS/INVENTARIO, `formato` PDF/XLSX, `periodo` nullable, `sucursal_id` nullable = consolidado, `sucursal_nombre` snapshot, `favorito`, `fecha_generacion`) — sin seed, arranca vacía |
+
+> **ms-reportes no guarda el archivo (PDF/Excel) en sí, solo los parámetros usados para generarlo.** Cada
+> llamada exitosa a `/reportes/exportar` o `/reportes/inventario` inserta una fila en `reporte_generado`
+> **después** de generar los bytes (no antes, para no loguear intentos fallidos). El historial completo se
+> expone en `/reportes-guardados` (`GET` listar, `DELETE /{id}`, `PUT /{id}/favorito`) — ver sección
+> "ms-reportes" más abajo. Volver a "descargar" un reporte ya guardado **regenera el archivo en el momento**
+> (llamando de nuevo a `/exportar`/`/inventario`), así que también crea una fila nueva — es el comportamiento
+> esperado, no un bug: cada generación real queda registrada, sin excepciones.
 
 ### Credenciales semilla (ms-users import.sql)
 
@@ -237,6 +257,10 @@ npm run test:coverage     # + reporte de cobertura (@vitest/coverage-v8) en fron
 > **`front/src/test/setup.ts` incluye un polyfill de `localStorage`** en memoria (clase `MemoryStorage`). El Node de esta máquina expone un `localStorage` global nativo experimental que tapa el de jsdom y viene roto (objeto vacío, sin `getItem`/`setItem`/`clear`) — sin el polyfill, cualquier test que toque `localStorage` (p. ej. `PrefsContext`) falla con `TypeError`.
 
 **VSCode**: extensión **Vitest** (`vitest.explorer`) instalada y recomendada en `.vscode/extensions.json` — clic derecho sobre un archivo `*.test.ts(x)` → "Run Test with Coverage" (requiere `@vitest/coverage-v8`, ya en `devDependencies`).
+
+### Tareas pendientes
+
+- **`bff/src/test/java/com/grupofrontera/bff/BffResourceTest.java` está desactualizado**: `testHelloEndpoint` espera el body `"Hello from Quarkus REST"`, pero el endpoint real `GET /api/health` devuelve `{"service":"bff","status":"UP"}` desde hace tiempo — el test quedó desincronizado con un cambio anterior al endpoint de salud. Hoy `./mvnw test` en `bff/` falla por esto (1 test, no relacionado con ningún cambio reciente de roles/sucursales/reportes). Falta actualizar la aserción para que valide el contrato JSON real.
 
 ---
 
@@ -301,6 +325,7 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | POST   | /api/bff/sucursales                | ms-datos         |
 | PUT    | /api/bff/sucursales/{id}           | ms-datos         |
 | PUT    | /api/bff/sucursales/{id}/estado    | ms-datos         |
+| GET    | /api/bff/sucursales/{id}/usuarios  | ms-users (`/usuario-sucursales/sucursal/{id}` — dirección inversa de `/usuarios/{id}/sucursales`) |
 | GET    | /api/bff/kpis                      | ms-kpis          |
 | GET    | /api/bff/kpis/comparativo          | ms-kpis          |
 | GET    | /api/bff/productos                 | ms-datos (filtros: sucursalId, categoria, q, activo) |
@@ -312,6 +337,9 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 | GET    | /api/bff/productos/categorias      | ms-datos (valores del enum) |
 | GET    | /api/bff/reportes/exportar         | ms-reportes (KPIs) |
 | GET    | /api/bff/reportes/inventario       | ms-reportes (inventario de productos) |
+| GET    | /api/bff/reportes-guardados                | ms-reportes (historial real de reportes generados) |
+| DELETE | /api/bff/reportes-guardados/{id}           | ms-reportes (borra del historial) |
+| PUT    | /api/bff/reportes-guardados/{id}/favorito  | ms-reportes (toggle favorito, body `{favorito}`) |
 
 > **Export de reportes** (`/reportes/exportar?formato=pdf\|xlsx&periodo=YYYY-MM[&sucursalId=N]`):
 > - **Con `sucursalId`** → reporte individual de esa sucursal.
@@ -336,7 +364,9 @@ POST /api/bff/auth/logout   → bff:8090 → ms-auth:8088
 - **Endpoint de estado de sucursal** (`PUT /sucursales/{id}/estado`): el body espera el campo **`activo`** (booleano), no `habilitada`. Mismo contrato en ms-datos (`EstadoRequest.activo`).
 - **Sin seguridad interna**: el BFF no valida JWT — confía en que ms-auth valida. ms-users no tiene extensiones de seguridad.
 - **Asignación usuario↔sucursal**: `GET/POST /api/bff/usuarios/{usuarioId}/sucursales` y `DELETE /api/bff/usuarios/asignaciones-sucursal/{asignacionId}`. ⚠️ ms-users expone esto en **`/usuario-sucursales`** (NO en `/usuarios/{id}/sucursales`): el `UsersClient` del BFF apunta a `/usuario-sucursales`, `/usuario-sucursales/usuario/{id}` y `/usuario-sucursales/{id}/desactivar`. El POST del BFF inyecta `usuarioId` (del path) en el body `{usuarioId, sucursalId}` que espera ms-users; el GET enriquece cada asignación con `sucursalNombre` (vía ms-datos). El front usa esto en `UsersView` (botón "Asignar sucursales").
-- **Dos modelos de sucursal**: `/api/bff/sucursales` apunta a ms-datos (id: `Long`, ahora con `latitud`/`longitud`). ms-users tiene sus propias sucursales (id: `UUID`) — no expuestas en BFF.
+- **Dos modelos de sucursal**: `/api/bff/sucursales` apunta a ms-datos (id: `Long`, ahora con `latitud`/`longitud`/`direccion`/`anioApertura`). ms-users tiene sus propias sucursales (id: `UUID`) — no expuestas en BFF.
+- **`GET /api/bff/sucursales/{id}/usuarios`**: vive en `SucursalResource` (BFF) pero llama a `UsersClient.listarUsuariosPorSucursal`, no a `DatosClient` — es la dirección inversa de `/api/bff/usuarios/{id}/sucursales`. Lo usa `BranchesView` para resolver el "Jefe" de la sucursal seleccionada (primer usuario asignado por fecha).
+- **`/api/bff/reportes-guardados`** vive en un resource nuevo (`ReporteGeneradoResource`), separado de `ReporteResource` (que maneja `/api/bff/reportes/*`), porque en ms-reportes son dos paths raíz distintos (`/reportes` vs `/reportes-guardados`), no anidados.
 
 ---
 
@@ -361,13 +391,40 @@ VALUES (1, '2026-07', 15847263, 421, 37642.00, 18000000, 88.04, NOW());
 
 ---
 
+## ms-reportes — Reporting microservice
+
+Puerto **8087**, BD `reportes_db`/`db_reportes` (puerto 5439, ver "Puertos"). Consume ms-kpis (`kpis-api`) y
+ms-datos (`datos-api`) vía REST client para construir los reportes; tiene su propia BD **solo** para el
+historial de generación (`reporte_generado`), no para los datos de negocio en sí.
+
+### Endpoints
+
+| Method | Path                              | Descripción |
+|--------|-----------------------------------|-------------|
+| GET    | /reportes/dashboard                | Datos agregados de una sucursal/período (usado internamente y por `/comparativo`) |
+| GET    | /reportes/comparativo              | Comparativo de todas las sucursales en un período |
+| GET    | /reportes/exportar                 | Exporta KPIs a PDF/Excel (individual o consolidado) — **registra el historial** |
+| GET    | /reportes/inventario                | Exporta inventario de productos a PDF/Excel (individual o consolidado) — **registra el historial** |
+| GET    | /reportes-guardados                 | Lista el historial real de reportes generados (más reciente primero) |
+| DELETE | /reportes-guardados/{id}           | Borra una fila del historial (no borra ningún archivo, porque no se guarda ninguno) |
+| PUT    | /reportes-guardados/{id}/favorito  | Marca/desmarca favorito — body `{"favorito": true\|false}` |
+
+### Key implementation details
+
+- **Sin blobs**: `reporte_generado` guarda los **parámetros** de cada export exitoso (`tipo`, `formato`, `periodo`, `sucursalId`, `sucursalNombre` snapshot, `favorito`, `fechaGeneracion`), no el PDF/Excel en sí. Para "descargar" un reporte del historial, el front vuelve a llamar a `/exportar`/`/inventario` con esos mismos parámetros — el archivo se regenera al vuelo.
+- **Orden de registro**: `ReportesRecurso` genera primero los bytes (`ExportacionServicio.exportarPdf/...Excel/...Comparativo/...Inventario...`) y **solo si eso no lanzó excepción** llama a `ReporteGeneradoService.registrar(...)`. Así nunca queda una fila de un export que en realidad falló.
+- **`tipo`**: `"KPIS"` (desde `/exportar`) o `"INVENTARIO"` (desde `/inventario`). `sucursalId == null` significa reporte consolidado (todas las sucursales) — no un sucursalId real.
+- **`ReporteGeneradoClient`** (BFF) es una interfaz de REST Client **separada** de `ReportesClient`, aunque comparten el mismo `configKey = "ms-reportes"` — porque `/reportes-guardados` es un path raíz distinto a `/reportes`, no un sub-path.
+
+---
+
 ## front — Frontend
 
 **Stack**: React 19 + Vite + TypeScript. Ubicado en `front/`.
 
 **Dev server**: `npm run dev` desde `front/` → `http://localhost:5173`
 
-**Estado**: conectado al BFF. Ya no usa datos mock para auth, usuarios, sucursales, KPIs, productos ni reportes. Los datos mock restantes en `src/data.ts` corresponden a secciones sin endpoint BFF aún (reportes guardados, log de auditoría, sesiones, integraciones).
+**Estado**: conectado al BFF. Ya no usa datos mock para auth, usuarios, sucursales, KPIs, productos, reportes ni el historial de "Reportes guardados" (real desde que ms-reportes tiene BD propia). `src/data.ts` ya no tiene secciones mock — solo catálogos estáticos reales del propio front (nav, paleta de roles/estados, nombres de sucursal para el modal de "Programar reporte").
 
 ### Comandos
 
@@ -387,7 +444,7 @@ src/
   main.tsx                    # entry point — monta AuthProvider + PrefsProvider + App
   App.tsx                     # shell: AuthGate (loading → Login → AppShell), routing por vista
   index.css                   # importa tokens.css + kit.css + maplibre-gl.css
-  data.ts                     # mocks residuales: inventario, reportesGuardados, auditLog, etc.
+  data.ts                     # catálogos estáticos del front: nav, roleMeta/estadoMeta (colores/labels), modules (tarjetas del Dashboard), branchNames (sucursales para "Programar reporte") — sin datos mock de negocio
   api/
     types.ts                  # interfaces TS: UsuarioDTO, SucursalDTO, RespuestaKpis, ProductoDTO, CategoriaProducto/CATEGORIAS, ImportResultado, etc.
     client.ts                 # fetch wrapper: Authorization header, auto-refresh en 401, AbortSignal
@@ -396,9 +453,10 @@ src/
     auth.test.ts
     usuarios.ts               # listarUsuarios, crearUsuario, actualizarUsuario, desactivarUsuario, activarUsuario
     roles.ts                  # listarRoles, crearRol
-    sucursales.ts             # listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal
+    sucursales.ts             # listarSucursales, crearSucursal, actualizarSucursal, cambiarEstadoSucursal, listarUsuariosSucursal (jefe real)
     kpis.ts                   # obtenerKpis, obtenerComparativo
-    reportes.ts               # exportarReporte → blob download
+    reportes.ts               # exportarReporte, exportarInventario → blob download (cada llamada exitosa también registra historial en ms-reportes)
+    reportesGuardados.ts      # listarReportesGuardados, eliminarReporteGuardado, marcarFavoritoReporte
     productos.ts              # listarProductos, crearProducto, actualizarProducto, cambiarEstadoProducto, importarProductos
   context/
     AuthContext.tsx            # JWT en memoria, refreshToken en localStorage 'cord_rt', auto-restore al montar
@@ -410,27 +468,27 @@ src/
   utils/
     rut.ts                    # validarRut (módulo 11), formatearRut
     rut.test.ts
-    periodo.ts                # ultimosMeses(periodo, n) + tipo ChartSeries — serie de meses para gráficos
+    periodo.ts                # ultimosMeses(periodo, n), formatearPeriodo("2026-06"→"Junio 2026") + tipo ChartSeries
     periodo.test.ts
+    permisos.ts                # puedeVerUsuariosYRoles, puedeGestionarSucursales — control de acceso por rol (ver "Patrones clave")
   test/
     setup.ts                  # polyfill de localStorage (ver "Testing") + @testing-library/jest-dom
   components/
     Icon.tsx                  # wrapper de lucide-react con lookup por nombre kebab-case
     Primitives.tsx            # Badge, Delta, Button, Avatar, ColorAvatar, Switch, KpiCard, PageHead, Panel, ModalOverlay
     Primitives.test.tsx
-    Sidebar.tsx               # sidebar fijo 240px — usa AuthContext para nombre/rol/iniciales
+    Sidebar.tsx               # sidebar fijo 240px — usa AuthContext para nombre/rol/iniciales; filtra Usuarios/Roles del nav con permisos.ts según el rol
     Topbar.tsx                # barra superior sticky con búsqueda, exportar
     Chart.tsx                 # gráfico de línea SVG (theme-aware, tooltip hover); ChartData admite fullLabels opcional
     Login.tsx                 # login real via AuthContext, validación, manejo de errores
   views/
-    DashboardView.tsx         # KPIs reales: selector "Todas las sucursales"/individual + alcance "Mes"/"Todos los meses" (agrega vía obtenerComparativo) + gráfico dinámico de 6 meses
+    DashboardView.tsx         # KPIs reales: selector "Todas las sucursales"/individual + alcance "Mes"/"Todos los meses" (agrega vía obtenerComparativo) + gráfico dinámico de 6 meses. La tarjeta de módulo "Gestión de usuarios" se oculta si el rol no puede ver Usuarios/Roles (permisos.ts).
     ReportesView.tsx          # comparativo real + gráfico dinámico + export real, umbrales >90/60-90/<60
-    InventoryView.tsx         # datos mock — sin endpoint BFF
     UsersView.tsx             # CRUD real de usuarios, validación RUT (9 dígitos + DV 0-9/K), debounced search. Acciones por fila: Editar (EditUserModal: nombre/apellido/email/telefono), Asignar sucursales (AssignBranchesModal: toggle por sucursal → POST/DELETE asignación, enriquecido con nombres), Ver detalle, Activar/Desactivar.
-    RolesView.tsx             # lista roles (ms-users vía BFF) + modal "Nuevo rol" (select de NombreRol enum + descripción opcional)
-    BranchesView.tsx          # CRUD real de sucursales (ms-datos), mapa MapLibre theme-aware con coords de la API. Botón "Cómo llegar" en BranchMap: geolocalización del navegador → ruta OSRM (router.project-osrm.org) dibujada como capa GeoJSON, con fallback a línea recta (haversine) si OSRM falla. La ruta se limpia al cambiar de sucursal y se re-pinta tras cambio de tema.
+    RolesView.tsx             # 3 roles reales del sistema (ADMIN/SOPORTE/GERENTE, ver "Patrones clave") con matriz de acceso por módulo (Sin acceso/Lectura/Edición/Total), conteo real de usuarios por rol (cruza con listarUsuarios), búsqueda, modal "Ver" con detalle, y modal "Nuevo rol" (select de NombreRol enum + descripción) para roles personalizados — estos quedan sin nivel de acceso definido hasta agregarlos a permisos.ts.
+    BranchesView.tsx          # CRUD real de sucursales (ms-datos, incluye direccion/anioApertura), mapa MapLibre theme-aware con coords de la API. Tarjeta de detalle al seleccionar una sucursal: Ciudad/Apertura/Dirección (ms-datos), Jefe (real, primer usuario asignado vía ms-users), Ventas del mes (real, ms-kpis período actual), Stock (real, cuenta productos bajo mínimo en ms-datos). Botón "Cómo llegar": geolocalización del navegador (reintenta con baja precisión si GPS/Wi-Fi de alta precisión falla — típico en PCs de escritorio) → ruta OSRM (router.project-osrm.org) dibujada como capa GeoJSON, con fallback a línea recta (haversine) si OSRM falla. Para Gerente (puedeGestionarSucursales=false): sin botones Nueva/Editar/Activar-Desactivar, solo lectura.
     ProductosView.tsx         # catálogo de productos (ms-datos): filtros sucursal/categoría/búsqueda (debounced); tabla código·nombre·categoría·sucursal·stock (resaltado si < mínimo)·precio·actualizado; botón "Importar JSON" (insert-only, muestra insertados/rechazados); "Nuevo producto" (modal); export PDF/Excel de inventario.
-    ReportesGuardadosView.tsx # datos mock — sin endpoint BFF
+    ReportesGuardadosView.tsx # historial real de reportes generados (ms-reportes vía BFF) — favorito persistido, eliminar borra el registro, descargar vuelve a generar el archivo (sin blob guardado) y refresca la lista. "Programar reporte" sigue siendo solo UI — no hay scheduler real.
     ConfiguracionView.tsx     # solo tema oscuro/claro (sin tabs Perfil/Notificaciones/Seguridad — se eliminaron por no tener funcionalidad real; logout vive en Sidebar, no aquí)
 public/
   fonts/                      # Geist, Geist Mono, Inter (TTF, full weight range)
@@ -449,6 +507,8 @@ public/
 - **Listado de usuarios**: `listarUsuarios()` llama a `/api/bff/usuarios/todos` (incluye inactivos) y el filtro "Solo activos" es del lado del cliente — así un usuario desactivado sigue visible y se puede reactivar.
 - **Coords del mapa**: `BranchesView` usa `latitud`/`longitud` de la sucursal (editables en el modal). Fallback: tabla estática `COORDS` por nombre → centro por defecto. El estilo del mapa (`makeMapStyle`) sigue el tema claro/oscuro escuchando el evento `prefs-changed`.
 - **Gráficos dinámicos**: Dashboard y Reportes construyen la serie del gráfico con KPIs reales de los últimos 6 meses (`ultimosMeses` en `utils/periodo.ts`); si no hay datos muestran estado vacío, no valores mock.
+- **Control de acceso por rol** (`utils/permisos.ts`): basado en `usuario.roles` (string[] real desde `UsuarioDTO.roles`, ms-users). Solo `ADMIN` puede ver Usuarios/Roles (`puedeVerUsuariosYRoles`); `GERENTE` además no puede crear/editar/activar-desactivar Sucursales (`puedeGestionarSucursales`, solo lectura). Se aplica en 3 capas: `Sidebar` (oculta el ítem de nav), `App.tsx` (`vistaRestringida` — defensa en profundidad si se llega por otro camino, p. ej. las tarjetas de módulo del Dashboard) y dentro de cada vista (botones ocultos). Cualquier rol nuevo creado desde "Crear rol" en `RolesView` queda **sin nivel de acceso definido** (tratado como restringido por defecto) hasta que se agregue explícitamente a `permisos.ts`.
+- **Tarjeta de detalle de sucursal** (`BranchesView`): agrega datos de 3 microservicios para una sola sucursal — Jefe vía `listarUsuariosSucursal` (ms-users), Ventas del mes vía `obtenerKpis` (ms-kpis, período actual), Stock vía `listarProductos` (ms-datos, cuenta `stock < stockMinimo`). Cada uno se carga por separado con su propio estado `undefined` (cargando) / `null` (sin datos) — un fallo en una de las 3 llamadas no bloquea las otras dos.
 
 ### Dependencias relevantes
 
@@ -475,5 +535,6 @@ Basado en el **Cordillera Design System** (`design-handoff/cordillera-design-sys
 | ms-users          | `http://localhost:8085`  |
 | ms-datos          | `http://localhost:8089`  |
 | ms-kpis           | `http://localhost:8086`  |
+| ms-reportes       | `http://localhost:8087`  |
 | front dev server  | `http://localhost:5173`  |
 | RabbitMQ UI       | `http://localhost:15672` |
