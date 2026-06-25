@@ -53,6 +53,16 @@ You can then execute your native executable with: `./target/ms-kpis-1.0.0-SNAPSH
 
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 
+## Testing
+
+Tests unitarios de la capa Servicio con Mockito. Usa `mockStatic` para métodos estáticos de consulta y spy con `doNothing().when(spy)` para `persistAndFlush()`.
+
+```shell script
+./mvnw test                  # 5 tests (KpisServicioTest)
+```
+
+**Cobertura JaCoCo**: 89.8% instruction, scoped a `servicio/*`. Reporte en `target/site/jacoco/`.
+
 ## Provided Code
 
 ### REST

@@ -53,6 +53,22 @@ You can then execute your native executable with: `./target/ms-datos-1.0.0-SNAPS
 
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 
+## Testing
+
+Tests unitarios de la capa Service con `@QuarkusTest` + H2 en memoria. Los métodos estáticos de Panache (`Producto.find()`, `Sucursal.findById()`, etc.) son bytecode-enhanced por Hibernate y no se pueden mockear con `mockStatic`, por eso se usa una BD H2 real en el perfil `%test`.
+
+```shell script
+./mvnw test                  # 24 tests (ProductoServiceTest 19, SucursalServiceTest 5)
+./mvnw test -Dtest=ProductoServiceTest   # test puntual
+```
+
+**Cobertura JaCoCo**: `quarkus-jacoco` extension (70.4% instruction, scoped a `domain/service/*`). El reporte se genera en `target/site/jacoco/`.
+
+Para correr los smoke tests `*ResourceTest` (requieren BD Postgres real):
+```shell script
+./mvnw test -Pdb-tests
+```
+
 ## Provided Code
 
 ### REST

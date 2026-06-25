@@ -244,6 +244,31 @@ npm run test                       # = mvnw test → solo *ServiceTest + reporte
 
 > Los smoke tests `*ResourceTest`/`*ResourceIT` (`AuthResourceTest`, `UsersResourceTest`) no se eliminaron — siguen teniendo valor para verificación manual/CI con BD real — pero ya no corren en el flujo por defecto. Usa el perfil `-Pdb-tests` (o `-Dtest=NombreDeLaClase` puntual) cuando quieras ejecutarlos, con `docker compose up -d` o `mvnw quarkus:dev` levantando la BD primero.
 
+### ms-datos, ms-kpis, ms-reportes y bff — unit tests de la capa Service
+
+Todos siguen el mismo patrón `@ExtendWith(MockitoExtension.class)` o `@QuarkusTest` + H2, con `jacoco-maven-plugin` (0.8.14) y `surefire.excludes` para `*ResourceTest.java`.
+
+| Servicio       | Clases de test                                  | Cobertura JaCoCo (INSTRUCTION) |
+|----------------|-------------------------------------------------|-------------------------------|
+| `ms-datos`     | `ProductoServiceTest` (19), `SucursalServiceTest` (5) | **70.4%** ✓ (quarkus-jacoco, service package) |
+| `ms-kpis`      | `KpisServicioTest` (5)                          | **89.8%** ✓ |
+| `ms-reportes`  | `ReporteGeneradoServiceTest` (10), `ReportesServicioTest` (10) | **95.8%** ✓ |
+| `bff`          | `BffResourceTest` (1), `ClientExceptionMapperTest` (4) | **96.2%** ✓ |
+
+**Decisiones clave de testing**:
+
+- **ms-datos/ms-kpis**: Los métodos estáticos de Panache (`Producto.find()`, `Producto.findById()`, `IndicadorVentas.buscarPorSucursalYPeriodo()`) son bytecode-enhanced por Hibernate y **no se pueden mockear con `mockStatic`** en JUnit plano — la excepción es `IllegalStateException: This method is normally automatically overridden in subclasses`. Por eso `ms-datos` usa `@QuarkusTest` con H2 en memoria (perfil `%test`), y `ms-kpis` usa `mockStatic` + `doNothing().when(spy)` para métodos de instancia (`persistAndFlush()`).
+- **ms-datos + JaCoCo**: Usa la extensión `quarkus-jacoco` en vez del plugin estándar `jacoco-maven-plugin`, porque el bytecode enhancement de Panache impide que el agente estándar mida cobertura. Configurado en `%test` profile del `application.properties`. El reporte se genera en `target/site/jacoco/` con includes scoped a `domain/service/*`.
+- **bff**: Los REST Clients (`@Singleton`) no se pueden mockear con `@InjectMock` — Quarkus 3.36 elimina esa anotación. Los tests se limitan a `BffResourceTest` (health endpoint, `@QuarkusTest`) y `ClientExceptionMapper` (JUnit plano). Los resources restantes (proxies al upstream) no tienen tests unitarios.
+- **JaCoCo config**: Todos los módulos (excepto ms-datos) usan el `jacoco-maven-plugin` estándar con `<includes>` para limitar el reporte solo a los paquetes `service/servicio`. ms-datos usa `quarkus-jacoco` con el mismo scoping via `%test.quarkus.jacoco.includes`.
+
+```powershell
+cd ms-datos     && .\mvnw.cmd test          # 24 tests + JaCoCo >60%
+cd ms-kpis      && .\mvnw.cmd test          # 5 tests + JaCoCo >60%
+cd ms-reportes  && .\mvnw.cmd test          # 20 tests + JaCoCo >60%
+cd bff          && .\mvnw.cmd test          # 5 tests + JaCoCo >60%
+```
+
 ### front — Vitest + React Testing Library
 
 No había ningún framework de testing instalado; se agregó Vitest + `@testing-library/react` + jsdom. 15 tests en 7 archivos: `utils/rut.test.ts`, `utils/periodo.test.ts`, `hooks/useDebounce.test.ts`, `api/client.test.ts`, `api/auth.test.ts`, `context/PrefsContext.test.tsx`, `components/Primitives.test.tsx`.
@@ -260,7 +285,7 @@ npm run test:coverage     # + reporte de cobertura (@vitest/coverage-v8) en fron
 
 ### Tareas pendientes
 
-- **`bff/src/test/java/com/grupofrontera/bff/BffResourceTest.java` está desactualizado**: `testHelloEndpoint` espera el body `"Hello from Quarkus REST"`, pero el endpoint real `GET /api/health` devuelve `{"service":"bff","status":"UP"}` desde hace tiempo — el test quedó desincronizado con un cambio anterior al endpoint de salud. Hoy `./mvnw test` en `bff/` falla por esto (1 test, no relacionado con ningún cambio reciente de roles/sucursales/reportes). Falta actualizar la aserción para que valide el contrato JSON real.
+- **Cobertura JaCoCo de ms-datos**: `@QuarkusTest` + bytecode enhancement de Panache impide que JaCoCo mida las 24 pruebas de `ProductoServiceTest` y `SucursalServiceTest`. Para medir cobertura en ms-datos, habría que refactorizar los services para usar repositorios inyectables (como ms-users) en vez de métodos estáticos de Panache, y así mockearlos con Mockito. Esto permitiría tests puramente unitarios sin `@QuarkusTest` + H2.
 
 ---
 

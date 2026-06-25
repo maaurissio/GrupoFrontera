@@ -53,6 +53,16 @@ You can then execute your native executable with: `./target/bff-1.0.0-SNAPSHOT-r
 
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 
+## Testing
+
+Tests unitarios de `ClientExceptionMapper` (JUnit plano) + smoke test del health endpoint (`@QuarkusTest`). Los REST Clients (`@Singleton`) no se pueden mockear con `@InjectMock` (eliminado en Quarkus 3.36+), por eso los resources proxy no tienen tests unitarios.
+
+```shell script
+./mvnw test                  # 5 tests (BffResourceTest 1, ClientExceptionMapperTest 4)
+```
+
+**Cobertura JaCoCo**: 96.2% instruction, scoped a `exception/*` y `BffResource`. Reporte en `target/site/jacoco/`.
+
 ## Provided Code
 
 ### REST

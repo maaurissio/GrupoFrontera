@@ -53,6 +53,21 @@ You can then execute your native executable with: `./target/ms-reportes-1.0.0-SN
 
 If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
 
+## Testing
+
+Tests unitarios de la capa Service con Mockito puro (sin QuarkusTest). Todas las dependencias se mockean con `@Mock`/`@InjectMocks`.
+
+```shell script
+./mvnw test                  # 20 tests (ReporteGeneradoServiceTest 10, ReportesServicioTest 10)
+```
+
+**Cobertura JaCoCo**: 95.8% instruction, scoped a `servicio/*`. Reporte en `target/site/jacoco/`.
+
+Para correr los smoke tests `*ResourceTest` (requieren BD Postgres real):
+```shell script
+./mvnw test -Pdb-tests
+```
+
 ## Provided Code
 
 ### REST
