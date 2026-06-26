@@ -32,11 +32,21 @@ export interface RolDTO {
   id: string;
   nombre: NombreRol;
   descripcion: string | null;
+  permisos: Record<string, string>;
 }
 
 export interface RolCreatePayload {
   nombre: NombreRol;
   descripcion: string | null;
+  permisos: Record<string, string>;
+}
+
+export interface KpisUpdatePayload {
+  sucursalId: number;
+  periodo: string;
+  totalVentas?: number;
+  cantidadTransacciones?: number;
+  metaMensual?: number;
 }
 
 export interface SucursalDTO {

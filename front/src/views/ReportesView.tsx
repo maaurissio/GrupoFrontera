@@ -2,15 +2,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Delta, Panel } from '../components/Primitives';
 import { LineChart } from '../components/Chart';
+import { EditarKpisModal } from '../components/EditarKpisModal';
 import { listarSucursales } from '../api/sucursales';
 import { obtenerComparativo } from '../api/kpis';
 import { exportarReporte } from '../api/reportes';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
-import { ultimosMeses, type ChartSeries } from '../utils/periodo';
+import { rangoMeses, type ChartSeries } from '../utils/periodo';
+import { useAuth } from '../context/AuthContext';
+import { puedeEditarKpis } from '../utils/permisos';
 
 function currentPeriodo(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function periodoHaceN(n: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function fmtClp(n: number): string {
@@ -21,9 +30,13 @@ function metaKind(p: number) { return p > 90 ? 'success' : p >= 60 ? 'warning' :
 function metaColor(p: number) { return 'var(--color-' + metaKind(p) + ')'; }
 
 export function ReportesView() {
+  const { usuario } = useAuth();
+  const puedeEditar = puedeEditarKpis(usuario?.roles ?? []);
+
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
   const [sucursalId, setSucursalId] = useState<number | 'all'>('all');
   const [periodo, setPeriodo] = useState(currentPeriodo());
+  const [periodoDesde, setPeriodoDesde] = useState(periodoHaceN(11));
   const [comparativo, setComparativo] = useState<RespuestaKpis[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [errorData, setErrorData] = useState(false);
@@ -31,6 +44,7 @@ export function ReportesView() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [chartData, setChartData] = useState<ChartSeries | null>(null);
   const [chartStatus, setChartStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
+  const [showEditarKpis, setShowEditarKpis] = useState(false);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -56,14 +70,16 @@ export function ReportesView() {
     if (periodo) fetchComparativo(periodo);
   }, [periodo, fetchComparativo]);
 
-  const fetchChart = useCallback(async (per: string, suc: number | 'all') => {
+  // Gráfico: carga todos los meses en el rango [periodoDesde, periodo]
+  const fetchChart = useCallback(async (desde: string, hasta: string, suc: number | 'all') => {
+    // Validar que desde <= hasta
+    if (desde > hasta) return;
     setChartStatus('loading');
-    const meses = ultimosMeses(per, 6);
+    const meses = rangoMeses(desde, hasta);
     try {
       const porMes = await Promise.all(
         meses.map(mo => obtenerComparativo(mo.periodo).catch(() => [] as RespuestaKpis[])),
       );
-      // Por mes: si el filtro es "todas", agrega todas las sucursales; si no, toma la seleccionada.
       const agregados = porMes.map(rows => {
         const sel = suc === 'all' ? rows : rows.filter(r => r.sucursalId === suc);
         return {
@@ -90,8 +106,8 @@ export function ReportesView() {
   }, []);
 
   useEffect(() => {
-    if (periodo) fetchChart(periodo, sucursalId);
-  }, [periodo, sucursalId, fetchChart]);
+    if (periodo && periodoDesde) fetchChart(periodoDesde, periodo, sucursalId);
+  }, [periodo, periodoDesde, sucursalId, fetchChart]);
 
   async function doExport(fmt: 'pdf' | 'xlsx') {
     setExporting(fmt);
@@ -120,6 +136,7 @@ export function ReportesView() {
     tx: k.cantidadTransacciones,
     ticket: Number(k.ticketPromedio),
     meta: Number(k.porcentajeCumplimiento),
+    bajoMin: k.productosBajoMinimo,
   }));
 
   const filtered = sucursalId === 'all' ? allRows : allRows.filter(r => r.id === sucursalId);
@@ -129,18 +146,27 @@ export function ReportesView() {
   const totalTx = filtered.reduce((s, b) => s + b.tx, 0);
   const avgTicket = totalTx > 0 ? Math.round(totalSales / totalTx) : 0;
   const avgMeta = filtered.length > 0 ? Math.round(filtered.reduce((s, b) => s + b.meta, 0) / filtered.length) : 0;
+  const totalBajoMin = filtered.reduce((s, b) => s + (b.bajoMin ?? 0), 0);
+
+  const kpiActualParaEditar = sucursalId !== 'all'
+    ? comparativo.find(k => k.sucursalId === sucursalId) ?? null
+    : null;
+  const sucursalNombreEditar = sucursalId !== 'all'
+    ? (sucMap[sucursalId] ?? `Sucursal #${sucursalId}`)
+    : '';
 
   const kpis = [
-    { label: 'Total ventas', value: fmtClp(totalSales), delta: '', dir: 'up' as const },
-    { label: 'Ticket promedio', value: fmtClp(avgTicket), delta: '', dir: 'up' as const },
-    { label: 'Transacciones', value: totalTx.toLocaleString('es-CL'), delta: '', dir: 'up' as const },
+    { label: 'Total ventas', value: fmtClp(totalSales) },
+    { label: 'Ticket promedio', value: fmtClp(avgTicket) },
+    { label: 'Transacciones', value: totalTx.toLocaleString('es-CL') },
   ];
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* filters */}
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', flexWrap: 'wrap' }}>
-        <span className="ds-label" style={{ marginRight: 2 }}>Filtros</span>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', flexWrap: 'wrap' }}>
+        <span className="ds-label" style={{ marginRight: 2 }}>Ver</span>
         <div style={{ position: 'relative' }}>
           <select className="input select" value={sucursalId} onChange={e => setSucursalId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
             style={{ height: 34, paddingLeft: 32, paddingRight: 14, minWidth: 200 }}>
@@ -149,33 +175,54 @@ export function ReportesView() {
           </select>
           <Icon name="map-pin" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
         </div>
-        <div style={{ position: 'relative' }}>
-          <input
-            type="month"
-            className="input"
-            value={periodo}
-            onChange={e => setPeriodo(e.target.value)}
-            style={{ height: 34, paddingLeft: 32, paddingRight: 10, minWidth: 160 }}
-          />
-          <Icon name="calendar" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+
+        {/* Rango de fechas */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="ds-label">Desde</span>
+          <div style={{ position: 'relative' }}>
+            <input type="month" className="input" value={periodoDesde}
+              max={periodo}
+              onChange={e => setPeriodoDesde(e.target.value)}
+              style={{ height: 34, paddingLeft: 32, paddingRight: 10, minWidth: 150 }} />
+            <Icon name="calendar" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+          </div>
+          <span className="ds-label">Hasta</span>
+          <div style={{ position: 'relative' }}>
+            <input type="month" className="input" value={periodo}
+              min={periodoDesde}
+              onChange={e => setPeriodo(e.target.value)}
+              style={{ height: 34, paddingLeft: 32, paddingRight: 10, minWidth: 150 }} />
+            <Icon name="calendar" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+          </div>
         </div>
+
         {sucursalId !== 'all' && (
           <button className="btn btn-ghost btn-sm" onClick={() => setSucursalId('all')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Icon name="x" size={12} />Limpiar filtro
+            <Icon name="x" size={12} />Todas
           </button>
         )}
+
         <div style={{ flex: 1 }} />
+
+        {/* Editar KPIs — solo para roles con permisos, solo con sucursal específica */}
+        {puedeEditar && sucursalId !== 'all' && (
+          <button className="btn btn-secondary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }}
+            onClick={() => setShowEditarKpis(true)}>
+            <Icon name="pencil" size={13} />Editar KPIs
+          </button>
+        )}
+
         <button className="btn btn-secondary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }}
           disabled={!!exporting}
-          title={sucursalId === 'all' ? 'Exportar consolidado de todas las sucursales' : undefined}
+          title={sucursalId === 'all' ? 'Exportar informe consolidado de todas las sucursales' : 'Exportar informe detallado'}
           onClick={() => doExport('pdf')}>
-          {exporting === 'pdf' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="file-text" size={14} />Exportar PDF</>}
+          {exporting === 'pdf' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="file-text" size={14} />Informe PDF</>}
         </button>
         <button className="btn btn-primary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }}
           disabled={!!exporting}
-          title={sucursalId === 'all' ? 'Exportar consolidado de todas las sucursales' : undefined}
+          title={sucursalId === 'all' ? 'Exportar informe consolidado de todas las sucursales' : 'Exportar informe detallado'}
           onClick={() => doExport('xlsx')}>
-          {exporting === 'xlsx' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="table" size={14} />Exportar Excel</>}
+          {exporting === 'xlsx' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="table" size={14} />Informe Excel</>}
         </button>
       </div>
 
@@ -187,13 +234,12 @@ export function ReportesView() {
         </div>
       )}
 
-      {/* KPI cards */}
+      {/* KPI cards — reflejan el mes "Hasta" seleccionado */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
         {kpis.map(k => (
           <div key={k.label} className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span className="kpi-label">{k.label}</span>
             <div className="ds-kpi" style={{ fontSize: 28 }}>{loadingData ? '—' : k.value}</div>
-            {k.delta && <Delta dir={k.dir}>{k.delta.replace(/[+\-−]/, '')}</Delta>}
           </div>
         ))}
         <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -206,6 +252,7 @@ export function ReportesView() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.55fr) minmax(0,1fr)', gap: 16 }}>
+        {/* Gráfico — cubre el rango completo Desde→Hasta */}
         <Panel title="Ventas en el tiempo" action={
           chartData && <span className="ds-label">{chartData.fullLabels[0]} – {chartData.fullLabels[chartData.fullLabels.length - 1]}</span>
         }>
@@ -217,7 +264,7 @@ export function ReportesView() {
             <div style={{ height: 220, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="alert-circle" size={22} style={{ color: 'var(--color-danger)' }} />
               <div className="ds-sm" style={{ color: 'var(--text-secondary)' }}>Error al cargar la serie</div>
-              <button className="btn btn-ghost btn-sm" onClick={() => fetchChart(periodo, sucursalId)}>Reintentar</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => fetchChart(periodoDesde, periodo, sucursalId)}>Reintentar</button>
             </div>
           ) : chartData ? (
             <LineChart data={chartData} height={220} />
@@ -228,12 +275,14 @@ export function ReportesView() {
             </div>
           )}
         </Panel>
-        <Panel title="Indicadores de inventario">
+
+        {/* Indicadores de inventario — datos del mes "Hasta" */}
+        <Panel title="Indicadores del período">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[
-              { label: 'Productos bajo mínimo', value: '—',   icon: 'alert-triangle', kind: 'warning' },
-              { label: 'Rotación promedio',     value: '—', icon: 'refresh-cw',    kind: 'orange' },
-              { label: 'Días sin reposición',   value: '—',  icon: 'clock',          kind: 'neutral' },
+              { label: 'Productos bajo mínimo', value: loadingData ? '—' : String(totalBajoMin), icon: 'alert-triangle', kind: 'warning' },
+              { label: 'Sucursales con datos', value: loadingData ? '—' : String(filtered.length), icon: 'map-pin', kind: 'neutral' },
+              { label: 'Meses en el rango', value: String(rangoMeses(periodoDesde, periodo).length), icon: 'calendar', kind: 'neutral' },
             ].map(r => (
               <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span className="kpi-ico" style={{ width: 36, height: 36, color: r.kind === 'neutral' ? 'var(--text-secondary)' : 'var(--color-' + r.kind + ')' }}>
@@ -247,7 +296,9 @@ export function ReportesView() {
         </Panel>
       </div>
 
-      <Panel style={{ padding: 0 }} bodyStyle={{ padding: 0 }} title="Comparativo entre sucursales"
+      {/* Tabla comparativa — snapshot del mes "Hasta" */}
+      <Panel style={{ padding: 0 }} bodyStyle={{ padding: 0 }}
+        title="Comparativo entre sucursales"
         action={<span className="ds-label">{periodo} · orden por ventas</span>}>
         {errorData ? (
           <div style={{ padding: 32, textAlign: 'center' }}>
@@ -263,16 +314,18 @@ export function ReportesView() {
               <tr>
                 <th>Sucursal</th>
                 <th style={{ textAlign: 'right' }}>Total ventas</th>
+                <th style={{ textAlign: 'right' }}>Meta mensual</th>
                 <th style={{ textAlign: 'right' }}>Transacciones</th>
                 <th style={{ textAlign: 'right' }}>Ticket prom.</th>
                 <th style={{ textAlign: 'right' }}>% Meta</th>
+                <th style={{ textAlign: 'right' }}>Bajo mín.</th>
               </tr>
             </thead>
             <tbody>
               {loadingData ? (
                 [0,1,2,3].map(i => (
                   <tr key={i}>
-                    {[0,1,2,3,4].map(j => (
+                    {[0,1,2,3,4,5,6].map(j => (
                       <td key={j}><div style={{ height: 14, background: 'var(--bg-surface-3)', borderRadius: 4, opacity: 0.5 }} /></td>
                     ))}
                   </tr>
@@ -290,18 +343,38 @@ export function ReportesView() {
                     </span>
                   </td>
                   <td className="num">{fmtClp(b.sales)}</td>
+                  <td className="num" style={{ color: 'var(--text-secondary)' }}>
+                    {comparativo.find(k => k.sucursalId === b.id)
+                      ? fmtClp(Number(comparativo.find(k => k.sucursalId === b.id)!.metaMensual))
+                      : '—'}
+                  </td>
                   <td className="num" style={{ color: 'var(--text-secondary)' }}>{b.tx.toLocaleString('es-CL')}</td>
                   <td className="num" style={{ color: 'var(--text-secondary)' }}>{fmtClp(b.ticket)}</td>
                   <td className="num"><Badge kind={metaKind(b.meta)}>{b.meta.toFixed(1)}%</Badge></td>
+                  <td className="num" style={{ color: (b.bajoMin ?? 0) > 0 ? 'var(--color-warning)' : 'var(--text-secondary)' }}>
+                    {b.bajoMin ?? 0}
+                  </td>
                 </tr>
               ))}
               {!loadingData && ranked.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 32, color: 'var(--text-secondary)' }}>Sin datos para el período seleccionado</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: 'var(--text-secondary)' }}>Sin datos para el período seleccionado</td></tr>
               )}
             </tbody>
           </table>
         )}
       </Panel>
     </div>
+
+    {showEditarKpis && sucursalId !== 'all' && (
+      <EditarKpisModal
+        sucursalId={sucursalId}
+        sucursalNombre={sucursalNombreEditar}
+        periodo={periodo}
+        kpiActual={kpiActualParaEditar}
+        onClose={() => setShowEditarKpis(false)}
+        onGuardado={() => fetchComparativo(periodo)}
+      />
+    )}
+    </>
   );
 }

@@ -4,6 +4,7 @@ import com.grupofrontera.bff.client.KpisClient;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
@@ -31,5 +32,10 @@ public class KpiResource {
     @Path("/comparativo")
     public Response comparativo(@QueryParam("periodo") String periodo) {
         return kpisClient.obtenerComparativo(periodo);
+    }
+
+    @PUT
+    public Response actualizar(Object request) {
+        return kpisClient.actualizar(request);
     }
 }

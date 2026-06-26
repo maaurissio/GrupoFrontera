@@ -1,11 +1,14 @@
 package com.grupofrontera.mskpis.servicio;
 
+import com.grupofrontera.mskpis.dto.ActualizarKpisRequest;
 import com.grupofrontera.mskpis.dto.EventoActualizacionStock;
 import com.grupofrontera.mskpis.dto.EventoVentaRealizada;
+import com.grupofrontera.mskpis.dto.RespuestaKpis;
 import com.grupofrontera.mskpis.entidad.IndicadorInventario;
 import com.grupofrontera.mskpis.entidad.IndicadorVentas;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import jakarta.ws.rs.NotFoundException;
 import org.jboss.logging.Logger;
 
 import java.time.LocalDateTime;
@@ -45,6 +48,38 @@ public class KpisServicio {
         indicador.persistAndFlush();
         LOG.infof("IndicadorVentas actualizado: sucursal=%d, periodo=%s, totalVentas=%s",
                 indicador.sucursalRefId, indicador.periodo, indicador.totalVentas);
+    }
+
+    @Transactional
+    public RespuestaKpis actualizar(ActualizarKpisRequest req) {
+        if (req.sucursalId == null || req.periodo == null || req.periodo.isBlank()) {
+            throw new jakarta.ws.rs.BadRequestException("sucursalId y periodo son obligatorios");
+        }
+
+        IndicadorVentas indicador = IndicadorVentas
+                .buscarPorSucursalYPeriodo(req.sucursalId, req.periodo)
+                .orElseGet(() -> {
+                    IndicadorVentas nuevo = new IndicadorVentas();
+                    nuevo.sucursalRefId = req.sucursalId;
+                    nuevo.periodo = req.periodo;
+                    nuevo.fechaCalculo = LocalDateTime.now();
+                    return nuevo;
+                });
+
+        if (req.totalVentas != null) indicador.totalVentas = req.totalVentas;
+        if (req.cantidadTransacciones != null) indicador.cantidadTransacciones = req.cantidadTransacciones;
+        if (req.metaMensual != null) indicador.metaMensual = req.metaMensual;
+
+        indicador.recalcularTicketPromedio();
+        indicador.recalcularPorcentajeCumplimiento();
+        indicador.fechaCalculo = LocalDateTime.now();
+        indicador.persistAndFlush();
+
+        LOG.infof("KPI actualizado manualmente: sucursal=%d, periodo=%s", req.sucursalId, req.periodo);
+
+        IndicadorInventario inventario = IndicadorInventario
+                .buscarPorSucursalYPeriodo(req.sucursalId, req.periodo).orElse(null);
+        return RespuestaKpis.desde(indicador, inventario);
     }
 
     @Transactional

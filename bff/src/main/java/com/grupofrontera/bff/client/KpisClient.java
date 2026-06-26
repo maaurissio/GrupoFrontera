@@ -2,6 +2,7 @@ package com.grupofrontera.bff.client;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
@@ -23,4 +24,7 @@ public interface KpisClient {
     @GET
     @Path("/comparativo")
     Response obtenerComparativo(@QueryParam("periodo") String periodo);
+
+    @PUT
+    Response actualizar(Object request);
 }

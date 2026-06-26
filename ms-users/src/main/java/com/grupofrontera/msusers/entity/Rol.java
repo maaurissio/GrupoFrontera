@@ -22,6 +22,9 @@ public class Rol extends PanacheEntityBase {
     @Column(nullable = true)
     public String descripcion;
 
+    @Column(columnDefinition = "TEXT", nullable = true)
+    public String permisos;
+
     @Column(nullable = false)
     public Boolean activo = true;
 

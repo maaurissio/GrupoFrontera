@@ -1,8 +1,8 @@
 -- Roles
-INSERT INTO roles (id, nombre, descripcion, activo, creadoEn, actualizadoEn) VALUES
-('a1111111-1111-1111-1111-111111111111', 'ADMIN',   'Administrador del sistema', true, NOW(), NOW()),
-('b2222222-2222-2222-2222-222222222222', 'SOPORTE', 'Soporte tecnico',            true, NOW(), NOW()),
-('c3333333-3333-3333-3333-333333333333', 'GERENTE', 'Gerente de sucursal',        true, NOW(), NOW());
+INSERT INTO roles (id, nombre, descripcion, permisos, activo, creadoEn, actualizadoEn) VALUES
+('a1111111-1111-1111-1111-111111111111', 'ADMIN',   'Administrador del sistema', '{"dashboard":"total","reportes":"total","productos":"total","usuarios":"total","roles":"total","sucursales":"total"}', true, NOW(), NOW()),
+('b2222222-2222-2222-2222-222222222222', 'SOPORTE', 'Soporte tecnico',            '{"dashboard":"edicion","reportes":"edicion","productos":"edicion","usuarios":"sin-acceso","roles":"sin-acceso","sucursales":"edicion"}', true, NOW(), NOW()),
+('c3333333-3333-3333-3333-333333333333', 'GERENTE', 'Gerente de sucursal',        '{"dashboard":"edicion","reportes":"lectura","productos":"lectura","usuarios":"sin-acceso","roles":"sin-acceso","sucursales":"lectura"}', true, NOW(), NOW());
 
 -- Usuarios
 INSERT INTO usuarios (id, rut, dv, nombre, apellido, email, telefono, estado, creadoEn, actualizadoEn) VALUES

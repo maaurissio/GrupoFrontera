@@ -47,12 +47,19 @@ function nivelDeRol(nombreRol: string, moduloId: string): Nivel {
   return 'sin-definir';
 }
 
+const NIVELES: Nivel[] = ['sin-acceso', 'lectura', 'edicion', 'total'];
+
+function defaultPermisos(): Record<string, Nivel> {
+  return Object.fromEntries(MODULOS.map(m => [m.id, 'sin-acceso' as Nivel]));
+}
+
 interface FormState {
   nombre: NombreRol;
   descripcion: string;
+  permisos: Record<string, Nivel>;
 }
 
-const EMPTY_FORM: FormState = { nombre: 'VENDEDOR', descripcion: '' };
+const EMPTY_FORM: FormState = { nombre: 'VENDEDOR', descripcion: '', permisos: defaultPermisos() };
 
 function NuevoRolModal({
   onClose, onCreated,
@@ -68,12 +75,17 @@ function NuevoRolModal({
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
+  function setPermiso(moduloId: string, nivel: Nivel) {
+    setForm(prev => ({ ...prev, permisos: { ...prev.permisos, [moduloId]: nivel } }));
+  }
+
   async function submit() {
     setSaving(true);
     setError(null);
     const payload: RolCreatePayload = {
       nombre: form.nombre,
       descripcion: form.descripcion.trim() === '' ? null : form.descripcion.trim(),
+      permisos: form.permisos,
     };
     try {
       const created = await crearRol(payload);
@@ -93,7 +105,7 @@ function NuevoRolModal({
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div className="card" style={{ width: 440, maxWidth: '92vw', padding: 0 }}>
+      <div className="card" style={{ width: 500, maxWidth: '95vw', padding: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--bg-border)' }}>
           <span className="ds-h3">Nuevo rol</span>
           <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button>
@@ -110,9 +122,38 @@ function NuevoRolModal({
             <label className="field-label">Descripción (opcional)</label>
             <input className="input" value={form.descripcion} onChange={e => set('descripcion', e.target.value)} style={{ height: 34 }} />
           </div>
-          <div className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: -4 }}>
-            Solo Admin, Soporte y Gerente tienen niveles de acceso configurados. Un rol nuevo no
-            restringe ni habilita nada hasta que se agregue a la lógica de permisos del frontend.
+          {/* Matriz de permisos */}
+          <div>
+            <div className="field-label" style={{ marginBottom: 8 }}>Permisos por módulo</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--bg-border)', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '6px 12px', background: 'var(--bg-surface-3)' }}>
+                <span className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)' }}>Módulo</span>
+                <span className="ds-label" style={{ fontSize: 11, color: 'var(--text-disabled)', minWidth: 160, textAlign: 'center' }}>Nivel de acceso</span>
+              </div>
+              {MODULOS.map((m, i) => (
+                <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '8px 12px', borderTop: i === 0 ? '1px solid var(--bg-border)' : '1px solid var(--bg-border)' }}>
+                  <span className="ds-sm" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {NIVELES.map(n => {
+                      const active = form.permisos[m.id] === n;
+                      const meta = NIVEL_META[n];
+                      return (
+                        <button key={n} onClick={() => setPermiso(m.id, n)}
+                          title={meta.label}
+                          style={{
+                            height: 28, padding: '0 8px', borderRadius: 6, border: active ? `1.5px solid ${meta.color}` : '1px solid var(--bg-border)',
+                            background: active ? (meta.color === 'var(--bg-border-strong)' ? 'var(--bg-surface-3)' : meta.color + '22') : 'transparent',
+                            color: active ? (meta.color === 'var(--bg-border-strong)' ? 'var(--text-secondary)' : meta.color) : 'var(--text-disabled)',
+                            cursor: 'pointer', fontSize: 11, fontWeight: active ? 600 : 400, transition: 'all .15s',
+                          }}>
+                          {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           {error && (
             <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-danger)' }}>
@@ -154,28 +195,23 @@ function RoleDetailModal({ rol, usuariosCount, onClose }: {
           </span>
         </div>
         <p className="ds-sm" style={{ margin: '0 0 16px' }}>{rol.descripcion || 'Sin descripción.'}</p>
-        {esSistema ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {MODULOS.map(m => {
-              const nivel = nivelDeRol(rol.nombre, m.id);
-              const meta = NIVEL_META[nivel];
-              return (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--bg-border)' }}>
-                  <span className="ds-sm" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 2, background: meta.color }} />
-                    <span className="ds-label" style={{ fontSize: 11 }}>{meta.label}</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="ds-sm" style={{ color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <Icon name="info" size={14} style={{ marginTop: 2, flex: 'none' }} />
-            <span>Este rol no tiene niveles de acceso configurados todavía — agrégalo en utils/permisos.ts para activarlo.</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {MODULOS.map(m => {
+            const nivel: Nivel = esSistema
+              ? nivelDeRol(rol.nombre, m.id)
+              : ((rol.permisos?.[m.id] as Nivel) ?? 'sin-acceso');
+            const meta = NIVEL_META[nivel];
+            return (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--bg-border)' }}>
+                <span className="ds-sm" style={{ color: 'var(--text-primary)' }}>{m.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: meta.color }} />
+                  <span className="ds-label" style={{ fontSize: 11 }}>{meta.label}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
           <button className="btn btn-ghost" onClick={onClose}>Cerrar</button>
         </div>
@@ -289,7 +325,9 @@ export function RolesView() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 'none' }} title="Acceso por módulo">
                       {MODULOS.map(m => {
-                        const nivel = nivelDeRol(r.nombre, m.id);
+                        const nivel: Nivel = esSistema
+                          ? nivelDeRol(r.nombre, m.id)
+                          : ((r.permisos?.[m.id] as Nivel) ?? 'sin-acceso');
                         return (
                           <span key={m.id} title={`${m.label}: ${NIVEL_META[nivel].label}`}
                             style={{ width: 7, height: 18, borderRadius: 2, background: NIVEL_META[nivel].color, border: nivel === 'sin-definir' ? '1px dashed var(--bg-border-strong)' : 'none' }} />

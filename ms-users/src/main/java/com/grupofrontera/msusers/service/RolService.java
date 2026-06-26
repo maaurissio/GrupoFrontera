@@ -1,5 +1,7 @@
 package com.grupofrontera.msusers.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grupofrontera.msusers.dto.RolRequestDTO;
 import com.grupofrontera.msusers.dto.RolResponseDTO;
 import com.grupofrontera.msusers.entity.Rol;
@@ -13,6 +15,7 @@ import jakarta.ws.rs.core.Response;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -21,6 +24,11 @@ public class RolService {
 
     @Inject
     RolRepository rolRepository;
+
+    @Inject
+    ObjectMapper objectMapper;
+
+    private static final TypeReference<Map<String, String>> MAP_TYPE = new TypeReference<>() {};
 
     public List<RolResponseDTO> listarActivos() {
         return rolRepository.list("activo", true).stream()
@@ -74,6 +82,7 @@ public class RolService {
         dto.id = r.id;
         dto.nombre = r.nombre;
         dto.descripcion = r.descripcion;
+        dto.permisos = deserializarPermisos(r.permisos);
         return dto;
     }
 
@@ -81,9 +90,20 @@ public class RolService {
         Rol rol = new Rol();
         rol.nombre = dto.nombre;
         rol.descripcion = dto.descripcion;
+        rol.permisos = serializarPermisos(dto.permisos);
         rol.activo = true;
         rol.creadoEn = LocalDateTime.now();
         rol.actualizadoEn = LocalDateTime.now();
         return rol;
+    }
+
+    private Map<String, String> deserializarPermisos(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try { return objectMapper.readValue(json, MAP_TYPE); } catch (Exception e) { return Map.of(); }
+    }
+
+    private String serializarPermisos(Map<String, String> permisos) {
+        if (permisos == null || permisos.isEmpty()) return "{}";
+        try { return objectMapper.writeValueAsString(permisos); } catch (Exception e) { return "{}"; }
     }
 }

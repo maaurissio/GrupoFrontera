@@ -26,3 +26,18 @@ export function ultimosMeses(periodo: string, count: number): SerieMes[] {
 }
 
 export interface ChartSeries { months: string[]; ventas: number[]; tx: number[]; fullLabels: string[] }
+
+// Genera todos los meses entre `desde` y `hasta` (inclusive). Máximo 24 meses.
+export function rangoMeses(desde: string, hasta: string): SerieMes[] {
+  const [dy, dm] = desde.split('-').map(Number);
+  const [hy, hm] = hasta.split('-').map(Number);
+  const out: SerieMes[] = [];
+  let cy = dy, cm = dm;
+  while ((cy < hy || (cy === hy && cm <= hm)) && out.length < 24) {
+    const corto = MESES_CORTOS[cm - 1];
+    out.push({ periodo: `${cy}-${String(cm).padStart(2, '0')}`, corto, full: `${corto} ${cy}` });
+    cm++;
+    if (cm > 12) { cm = 1; cy++; }
+  }
+  return out;
+}

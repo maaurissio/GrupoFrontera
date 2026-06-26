@@ -1,9 +1,14 @@
 package com.grupofrontera.mskpis.recurso;
 
+import com.grupofrontera.mskpis.dto.ActualizarKpisRequest;
 import com.grupofrontera.mskpis.dto.RespuestaKpis;
 import com.grupofrontera.mskpis.entidad.IndicadorInventario;
 import com.grupofrontera.mskpis.entidad.IndicadorVentas;
+import com.grupofrontera.mskpis.servicio.KpisServicio;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
@@ -15,7 +20,11 @@ import java.util.Optional;
 
 @Path("/kpis")
 @Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
 public class KpisRecurso {
+
+    @Inject
+    KpisServicio kpisServicio;
 
     @GET
     public Response obtenerKpis(
@@ -39,6 +48,12 @@ public class KpisRecurso {
         RespuestaKpis respuesta = RespuestaKpis.desde(ventas.get(), inventario.orElse(null));
 
         return Response.ok(respuesta).build();
+    }
+
+    @PUT
+    public Response actualizar(ActualizarKpisRequest request) {
+        RespuestaKpis updated = kpisServicio.actualizar(request);
+        return Response.ok(updated).build();
     }
 
     @GET

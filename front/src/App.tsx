@@ -27,14 +27,14 @@ const TITLES: Record<ViewId, string> = {
 };
 
 const SUBTITLES: Record<ViewId, string> = {
-  dashboard:         'Estado operacional en tiempo real · Grupo Cordillera',
-  reportes:          'KPIs por sucursal y período · exportables',
+  dashboard:         'Resumen de KPIs',
+  reportes:          'KPIs por sucursal y período',
   usuarios:          'Roles, sucursales y estado de cuentas',
   roles:             'Roles del sistema y sus permisos',
-  sucursales:        'Red de sucursales · ubicación y cobertura',
+  sucursales:        'Red de sucursales',
   configuracion:     'Preferencias del sistema y tu cuenta',
-  productos:         'Inventario por sucursal · stock y precios',
-  reportesGuardados: 'Historial, favoritos y reportes programados',
+  productos:         'Inventario por sucursal',
+  reportesGuardados: 'Historial de reportes generados',
 };
 
 function AppShell() {

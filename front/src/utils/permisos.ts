@@ -8,3 +8,8 @@ export function puedeVerUsuariosYRoles(roles: string[]): boolean {
 export function puedeGestionarSucursales(roles: string[]): boolean {
   return !roles.includes('GERENTE');
 }
+
+// GERENTE puede editar KPIs (meta mensual + datos de ventas) directamente desde el Dashboard.
+export function puedeEditarKpis(roles: string[]): boolean {
+  return roles.includes('GERENTE') || roles.includes('ADMIN');
+}

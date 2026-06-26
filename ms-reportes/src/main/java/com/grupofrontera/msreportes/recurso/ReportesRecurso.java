@@ -75,20 +75,23 @@ public class ReportesRecurso {
         ReporteDashboard dashboard = reportesServicio.obtenerDashboard(sucursalId, periodo);
         String nombreSucursal = reportesServicio.obtenerNombresSucursales()
                 .getOrDefault(sucursalId, "Sucursal " + sucursalId);
-        String nombreArchivo = "reporte_sucursal" + sucursalId + "_" + periodo;
 
+        List<ProductoDto> productos;
+        try { productos = reportesServicio.obtenerInventario(sucursalId); }
+        catch (Exception e) { productos = List.of(); }
+
+        String nombreArchivo = "informe_sucursal" + sucursalId + "_" + periodo;
         byte[] contenido;
         String tipo;
         if (fmt.equals("pdf")) {
-            contenido = exportacionServicio.exportarPdf(dashboard, nombreSucursal);
+            contenido = exportacionServicio.exportarPdf(dashboard, nombreSucursal, productos);
             tipo = "application/pdf";
             nombreArchivo += ".pdf";
         } else {
-            contenido = exportacionServicio.exportarExcel(dashboard, nombreSucursal);
+            contenido = exportacionServicio.exportarExcel(dashboard, nombreSucursal, productos);
             tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             nombreArchivo += ".xlsx";
         }
-        // Solo se registra en el historial una vez que el archivo se generó con exito.
         reporteGeneradoService.registrar("KPIS", fmt, periodo, sucursalId, nombreSucursal);
         return blob(contenido, tipo, nombreArchivo);
     }
@@ -102,16 +105,20 @@ public class ReportesRecurso {
                     .build();
         }
         var nombres = reportesServicio.obtenerNombresSucursales();
-        String nombreArchivo = "reporte_consolidado_" + periodo;
 
+        List<ProductoDto> productos;
+        try { productos = reportesServicio.obtenerInventario(null); }
+        catch (Exception e) { productos = List.of(); }
+
+        String nombreArchivo = "informe_consolidado_" + periodo;
         byte[] contenido;
         String tipo;
         if (fmt.equals("pdf")) {
-            contenido = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres);
+            contenido = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres, productos);
             tipo = "application/pdf";
             nombreArchivo += ".pdf";
         } else {
-            contenido = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres);
+            contenido = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres, productos);
             tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             nombreArchivo += ".xlsx";
         }

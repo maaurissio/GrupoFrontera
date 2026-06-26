@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Delta, Panel } from '../components/Primitives';
 import { LineChart } from '../components/Chart';
+import { EditarKpisModal } from '../components/EditarKpisModal';
 import { DATA } from '../data';
 import type { ViewId } from '../data';
 import { listarSucursales } from '../api/sucursales';
@@ -9,7 +10,7 @@ import { obtenerComparativo } from '../api/kpis';
 import type { SucursalDTO, RespuestaKpis } from '../api/types';
 import { ultimosMeses, type ChartSeries } from '../utils/periodo';
 import { useAuth } from '../context/AuthContext';
-import { puedeVerUsuariosYRoles } from '../utils/permisos';
+import { puedeVerUsuariosYRoles, puedeEditarKpis } from '../utils/permisos';
 
 function currentPeriodo(): string {
   const now = new Date();
@@ -143,10 +144,13 @@ type Status = 'idle' | 'loading' | 'error' | 'nodata';
 export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void }) {
   const { usuario } = useAuth();
   const modulos = DATA.modules.filter(m => m.id === 'usuarios' ? puedeVerUsuariosYRoles(usuario?.roles ?? []) : true);
+  const puedeEditar = puedeEditarKpis(usuario?.roles ?? []);
   const [sucursales, setSucursales] = useState<SucursalDTO[]>([]);
   const [sucursalSel, setSucursalSel] = useState<number | 'all'>('all');
   const [scope, setScope] = useState<Scope>('mes');
   const [periodo, setPeriodo] = useState(currentPeriodo());
+  const [showEditarKpis, setShowEditarKpis] = useState(false);
+  const [kpiActualParaEditar, setKpiActualParaEditar] = useState<RespuestaKpis | null>(null);
 
   const [kpiStatus, setKpiStatus] = useState<Status>('idle');
   const [kpiCards, setKpiCards] = useState<KpiCard[]>([]);
@@ -170,8 +174,9 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
         const rows = await obtenerComparativo(per);
         const sel = seleccionar(Array.isArray(rows) ? rows : [], suc);
         const agg = agregar(sel);
-        if (!agg.hay) { setKpiStatus('nodata'); return; }
+        if (!agg.hay) { setKpiStatus('nodata'); setKpiActualParaEditar(null); return; }
         setKpiCards(kpisFromAgregado(agg));
+        setKpiActualParaEditar(suc !== 'all' && sel.length > 0 ? sel[0] : null);
         setKpiStatus('idle');
       } else {
         // 'todos': itera los últimos 12 meses y agrega todo.
@@ -246,6 +251,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
   const alcanceLabel = scope === 'mes' ? periodo : 'Últimos 12 meses';
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Selectores */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', flexWrap: 'wrap' }}>
@@ -288,6 +294,12 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
           <span className="ds-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="loader" size={14} />Cargando KPIs…
           </span>
+        )}
+        {puedeEditar && scope === 'mes' && sucursalSel !== 'all' && (
+          <button className="btn btn-secondary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5, marginLeft: 'auto' }}
+            onClick={() => setShowEditarKpis(true)}>
+            <Icon name="pencil" size={13} />Editar KPIs
+          </button>
         )}
       </div>
 
@@ -384,5 +396,17 @@ export function DashboardView({ onNavigate }: { onNavigate?: (v: ViewId) => void
       </div>
 
     </div>
+
+    {showEditarKpis && sucursalSel !== 'all' && (
+      <EditarKpisModal
+        sucursalId={sucursalSel}
+        sucursalNombre={sucursalNombre}
+        periodo={periodo}
+        kpiActual={kpiActualParaEditar}
+        onClose={() => setShowEditarKpis(false)}
+        onGuardado={() => fetchKpis(periodo, sucursalSel, scope)}
+      />
+    )}
+    </>
   );
 }
