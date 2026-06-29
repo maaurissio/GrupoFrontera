@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../components/Icon';
-import { Badge, Delta, Panel } from '../components/Primitives';
+import { Badge, Panel } from '../components/Primitives';
 import { LineChart } from '../components/Chart';
 import { EditarKpisModal } from '../components/EditarKpisModal';
 import { listarSucursales } from '../api/sucursales';
