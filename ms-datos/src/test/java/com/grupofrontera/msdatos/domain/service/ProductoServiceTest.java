@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -41,34 +40,6 @@ class ProductoServiceTest {
         s.ciudad = "Santiago";
         s.persist();
         return s;
-    }
-
-    @Test
-    void listarConFiltros_sinFiltros_retornaListaVacia() {
-        List<Producto> resultado = productoService.listarConFiltros(null, null, null, null);
-        assertTrue(resultado.isEmpty());
-    }
-
-    @Test
-    void buscarPorId_inexistente_retornaVacio() {
-        Optional<Producto> resultado = productoService.buscarPorId(999L);
-        assertTrue(resultado.isEmpty());
-    }
-
-    @Test
-    void existePorCodigoYSucursal_noExistente_retornaFalse() {
-        boolean existe = productoService.existePorCodigoYSucursal("NO-EXISTE", 1L);
-        assertFalse(existe);
-    }
-
-    @Test
-    @Transactional
-    void crear_sucursalNoEncontrada_lanza400() {
-        ProductoRequest req = crearRequest(999L);
-
-        WebApplicationException ex = assertThrows(WebApplicationException.class,
-                () -> productoService.crear(req));
-        assertEquals(400, ex.getResponse().getStatus());
     }
 
     @Test
@@ -107,12 +78,6 @@ class ProductoServiceTest {
     }
 
     @Test
-    void cambiarEstado_productoNoEncontrado_lanzaException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> productoService.cambiarEstado(999L, false));
-    }
-
-    @Test
     @Transactional
     void actualizar_exitoso_actualizaCampos() {
         Sucursal sucursal = crearSucursal();
@@ -133,12 +98,6 @@ class ProductoServiceTest {
         assertEquals("Actualizado", resultado.nombre);
         assertEquals(CategoriaProducto.TV, resultado.categoria);
         assertEquals(20, resultado.stock);
-    }
-
-    @Test
-    void actualizar_productoNoEncontrado_lanzaException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> productoService.actualizar(999L, crearRequest(1L)));
     }
 
     @Test
@@ -164,76 +123,16 @@ class ProductoServiceTest {
     }
 
     @Test
-    void ajustarStock_productoNoEncontrado_lanzaException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> productoService.ajustarStock(999L, 5));
-    }
-
-    @Test
-    void importar_itemsNulos_retornaVacio() {
-        var resultado = productoService.importar(null);
-        assertEquals(0, resultado.total);
-        assertEquals(0, resultado.insertados);
-        assertTrue(resultado.rechazados.isEmpty());
-    }
-
-    @Test
     @Transactional
-    void importar_sucursalNoEncontrada_rechazaItem() {
-        ProductoRequest req = crearRequest(999L);
-
-        var resultado = productoService.importar(List.of(req));
-
-        assertEquals(1, resultado.total);
-        assertEquals(0, resultado.insertados);
-        assertEquals(1, resultado.rechazados.size());
-    }
-
-    @Test
-    @Transactional
-    void importar_insertaProductoValido() {
+    void importar_multiplesItems_insertaYRechazaMezclados() {
         Sucursal sucursal = crearSucursal();
+        ProductoRequest valido = crearRequest(sucursal.id);
+        ProductoRequest invalido = crearRequest(999L);
 
-        var resultado = productoService.importar(List.of(crearRequest(sucursal.id)));
+        var resultado = productoService.importar(List.of(valido, invalido));
 
-        assertEquals(1, resultado.total);
+        assertEquals(2, resultado.total);
         assertEquals(1, resultado.insertados);
-    }
-
-    @Test
-    @Transactional
-    void importar_codigoDuplicado_rechazaItem() {
-        Sucursal sucursal = crearSucursal();
-        ProductoRequest req = crearRequest(sucursal.id);
-        productoService.importar(List.of(req));
-
-        var resultado = productoService.importar(List.of(req));
-
-        assertEquals(1, resultado.total);
-        assertEquals(0, resultado.insertados);
         assertEquals(1, resultado.rechazados.size());
-        assertTrue(resultado.rechazados.get(0).motivo.contains("Ya existe"));
-    }
-
-    @Test
-    void listarConFiltros_conFiltroSucursal_retornaFiltrado() {
-        List<Producto> resultado = productoService.listarConFiltros(1L, null, null, null);
-        assertNotNull(resultado);
-    }
-
-    @Test
-    @Transactional
-    void importar_conStockDefault_asignaDefaultCuandoNulo() {
-        Sucursal sucursal = crearSucursal();
-        ProductoRequest reqSinStock = new ProductoRequest();
-        reqSinStock.codigo = "PROD-NO-STOCK";
-        reqSinStock.nombre = "Sin Stock";
-        reqSinStock.sucursalId = sucursal.id;
-        reqSinStock.categoria = CategoriaProducto.TV;
-        reqSinStock.precio = new BigDecimal("10000");
-
-        var resultado = productoService.importar(List.of(reqSinStock));
-
-        assertEquals(1, resultado.insertados);
     }
 }

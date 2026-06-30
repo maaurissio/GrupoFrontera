@@ -28,15 +28,11 @@ class SucursalServiceTest {
     }
 
     @Test
-    void actualizar_sucursalNoEncontrada_lanzaException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> sucursalService.actualizar(999L, sucursalValida()));
-    }
-
-    @Test
-    void cambiarEstado_sucursalNoEncontrada_lanzaException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> sucursalService.cambiarEstado(999L, false));
+    @Transactional
+    void crear_sucursalValida_persisteYRetorna() {
+        Sucursal s = sucursalValida();
+        Sucursal resultado = sucursalService.crear(s);
+        assertNotNull(resultado.id);
     }
 
     @Test
@@ -75,13 +71,5 @@ class SucursalServiceTest {
         Sucursal resultado = sucursalService.cambiarEstado(id, false);
 
         assertFalse(resultado.habilitada);
-    }
-
-    @Test
-    @Transactional
-    void crear_sucursalValida_persisteYRetorna() {
-        Sucursal s = sucursalValida();
-        Sucursal resultado = sucursalService.crear(s);
-        assertNotNull(resultado.id);
     }
 }

@@ -52,4 +52,25 @@ class ClientExceptionMapperTest {
 
         assertEquals(500, result.getStatus());
     }
+
+    @Test
+    void toResponse_conBodyEnBlanco_generaMensajePorDefecto() {
+        Response upstream = Response.status(500).entity("   ").build();
+        ClientWebApplicationException ex = new ClientWebApplicationException(upstream);
+
+        Response result = mapper.toResponse(ex);
+
+        assertEquals(500, result.getStatus());
+        assertTrue(result.getEntity().toString().contains("error"));
+    }
+
+    @Test
+    void toResponse_respuestaSiempreEsJson() {
+        Response upstream = Response.status(404).entity("{\"error\":\"x\"}").build();
+        ClientWebApplicationException ex = new ClientWebApplicationException(upstream);
+
+        Response result = mapper.toResponse(ex);
+
+        assertEquals("application/json", result.getMediaType().toString());
+    }
 }

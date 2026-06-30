@@ -1,72 +1,81 @@
-# bff
+# bff — Backend-for-Frontend
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Capa de **agregación y orquestación** entre el frontend y los microservicios. El front
+habla **solo** con el BFF; el BFF reparte y combina las llamadas hacia `ms-auth`,
+`ms-users`, `ms-datos`, `ms-kpis` y `ms-reportes`. Quarkus 3 / Java 21 / Maven.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## ¿Qué hace?
 
-## Running the application in dev mode
+- Expone una API única bajo `/api/bff/*` para el frontend.
+- Propaga la autenticación (login/refresh/logout contra `ms-auth`).
+- Compone respuestas que requieren varios servicios (ej. alta de usuario = `ms-users` +
+  `ms-auth`; detalle de sucursal = datos de `ms-datos`, `ms-users` y `ms-kpis`).
+- Maneja **CORS** para el front y propaga los errores 4xx de los servicios upstream
+  (`ClientExceptionMapper`).
 
-You can run your application in dev mode that enables live coding using:
+No tiene base de datos propia.
 
-```shell script
-./mvnw quarkus:dev
-```
+## Endpoints (selección)
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+| Método | Path | Upstream |
+|--------|------|----------|
+| POST   | `/api/bff/auth/login` · `/refresh` · `/logout` | ms-auth |
+| GET/POST/PUT | `/api/bff/usuarios` (+ `/{id}`, activar/desactivar) | ms-users (+ ms-auth) |
+| GET/POST | `/api/bff/roles` | ms-users |
+| GET/POST/PUT | `/api/bff/sucursales` (+ estado, usuarios) | ms-datos / ms-users |
+| GET/PUT | `/api/bff/kpis` (+ `/comparativo`) | ms-kpis |
+| GET/POST/PUT | `/api/bff/productos` (+ estado, importar, categorías) | ms-datos |
+| GET    | `/api/bff/reportes/exportar` · `/inventario` | ms-reportes |
+| GET/DELETE/PUT | `/api/bff/reportes-guardados` (+ favorito) | ms-reportes |
 
-## Packaging and running the application
+Puerto HTTP: **8090**.
 
-The application can be packaged using:
+## Configuración de upstreams
 
-```shell script
+Cada microservicio se configura como REST client. URLs por variable de entorno (valor por
+defecto = localhost para dev):
+
+| Variable          | Docker compose          | Dev local |
+|-------------------|-------------------------|-----------|
+| `MS_AUTH_URL`     | `http://ms-auth:8088`   | `http://localhost:8088` |
+| `MS_USERS_URL`    | `http://ms-users:8085`  | `http://localhost:8085` |
+| `MS_DATOS_URL`    | `http://ms-datos:8089`  | `http://localhost:8089` |
+| `MS_KPIS_URL`     | `http://ms-kpis:8086`   | `http://localhost:8086` |
+| `MS_REPORTES_URL` | `http://ms-reportes:8087` | `http://localhost:8087` |
+
+CORS: habilitado para `http://localhost:5173`, con `Content-Disposition` expuesto (para la
+descarga de informes).
+
+## Ejecutar individualmente
+
+```bash
+# Modo dev (requiere los microservicios upstream accesibles)
+cd bff && ./mvnw quarkus:dev
+
+# Empaquetar y correr
 ./mvnw package
+java -jar target/quarkus-app/quarkus-run.jar
+
+# Solo dentro de Docker
+docker compose up -d --build bff
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+Para desarrollo aislado puedes levantar los microservicios con `docker compose up -d
+ms-auth ms-users ms-datos ms-kpis ms-reportes` y correr el BFF en modo dev apuntando a
+localhost.
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+## Documentación de la API (Swagger / OpenAPI)
 
-If you want to build an _über-jar_, execute the following command:
+Disponible también en Docker (gracias a `quarkus.swagger-ui.always-include=true`):
 
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+- Swagger UI → <http://localhost:8090/q/swagger-ui>
+- OpenAPI → <http://localhost:8090/q/openapi>
+
+## Tests
+
+```bash
+./mvnw test
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
-
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
-```
-
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/bff-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Testing
-
-Tests unitarios de `ClientExceptionMapper` (JUnit plano) + smoke test del health endpoint (`@QuarkusTest`). Los REST Clients (`@Singleton`) no se pueden mockear con `@InjectMock` (eliminado en Quarkus 3.36+), por eso los resources proxy no tienen tests unitarios.
-
-```shell script
-./mvnw test                  # 5 tests (BffResourceTest 1, ClientExceptionMapperTest 4)
-```
-
-**Cobertura JaCoCo**: 96.2% instruction, scoped a `exception/*` y `BffResource`. Reporte en `target/site/jacoco/`.
-
-## Provided Code
-
-### REST
-
-Easily start your REST Web Services
-
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+`BffResourceTest` (`@QuarkusTest`) y `ClientExceptionMapperTest` (propagación de errores
+upstream).
