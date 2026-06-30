@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../components/Icon';
 import { Badge, Panel, ModalOverlay } from '../components/Primitives';
 import { useDebounce } from '../hooks/useDebounce';
 import { listarSucursales } from '../api/sucursales';
-import { listarProductos, crearProducto, importarProductos, ajustarStockProducto } from '../api/productos';
+import { listarProductos, crearProducto, ajustarStockProducto } from '../api/productos';
 import { exportarInventario } from '../api/reportes';
 import { CATEGORIAS } from '../api/types';
 import type {
-  SucursalDTO, ProductoDTO, ProductoCreatePayload, ImportResultado, CategoriaProducto,
+  SucursalDTO, ProductoDTO, ProductoCreatePayload, CategoriaProducto,
 } from '../api/types';
 
 const CATEGORIA_LABEL: Record<string, string> = Object.fromEntries(
@@ -266,11 +266,6 @@ export function ProductosView() {
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<ImportResultado | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     const ac = new AbortController();
     listarSucursales(ac.signal).then(setSucursales).catch(() => {});
@@ -320,50 +315,8 @@ export function ProductosView() {
     }
   }
 
-  function onImportClick() {
-    setImportError(null);
-    setImportResult(null);
-    fileRef.current?.click();
-  }
-
-  function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // permite re-importar el mismo archivo
-    if (!file) return;
-    setImporting(true);
-    setImportError(null);
-    setImportResult(null);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const parsed = JSON.parse(String(reader.result));
-        if (!Array.isArray(parsed)) {
-          throw new Error('El archivo debe contener un arreglo JSON de productos.');
-        }
-        const result = await importarProductos(parsed as ProductoCreatePayload[]);
-        setImportResult(result);
-        fetchProductos(sucursalId, categoria, q);
-      } catch (err) {
-        setImportError(
-          err instanceof SyntaxError
-            ? 'El archivo no es un JSON válido.'
-            : (err as Error).message || 'No se pudo importar el archivo.',
-        );
-      } finally {
-        setImporting(false);
-      }
-    };
-    reader.onerror = () => {
-      setImporting(false);
-      setImportError('No se pudo leer el archivo.');
-    };
-    reader.readAsText(file);
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onFileSelected} />
-
       {/* Filtros + acciones */}
       <div className="card" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12, padding: '14px 16px' }}>
         <div className="field" style={{ minWidth: 180 }}>
@@ -393,9 +346,6 @@ export function ProductosView() {
           </button>
         )}
         <div style={{ flex: 1 }} />
-        <button className="btn btn-secondary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }} disabled={importing} onClick={onImportClick}>
-          {importing ? <><Icon name="loader" size={14} />Importando…</> : <><Icon name="upload" size={14} />Importar JSON</>}
-        </button>
         <button className="btn btn-secondary btn-sm" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6 }} disabled={!!exporting} onClick={() => doExport('pdf')}>
           {exporting === 'pdf' ? <><Icon name="loader" size={14} />Generando…</> : <><Icon name="file-text" size={14} />Exportar PDF</>}
         </button>
@@ -412,38 +362,6 @@ export function ProductosView() {
           <Icon name="alert-circle" size={16} />
           <span className="ds-sm">{exportError}</span>
           <button className="btn btn-ghost btn-icon btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setExportError(null)}><Icon name="x" size={14} /></button>
-        </div>
-      )}
-
-      {importError && (
-        <div role="alert" className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
-          <Icon name="alert-circle" size={16} />
-          <span className="ds-sm">{importError}</span>
-          <button className="btn btn-ghost btn-icon btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setImportError(null)}><Icon name="x" size={14} /></button>
-        </div>
-      )}
-
-      {importResult && (
-        <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, borderColor: importResult.rechazados.length > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name={importResult.rechazados.length > 0 ? 'alert-triangle' : 'check-circle'} size={16}
-              style={{ color: importResult.rechazados.length > 0 ? 'var(--color-warning)' : 'var(--color-success)' }} />
-            <span className="ds-sm" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-              {importResult.insertados} insertados, {importResult.rechazados.length} rechazados (de {importResult.total} en el archivo)
-            </span>
-            <button className="btn btn-ghost btn-icon btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setImportResult(null)}><Icon name="x" size={14} /></button>
-          </div>
-          {importResult.rechazados.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
-              {importResult.rechazados.map((r, i) => (
-                <div key={`${r.codigo}-${r.sucursalId}-${i}`} className="ds-sm" style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}>
-                  <span className="ds-mono" style={{ color: 'var(--text-primary)' }}>{r.codigo}</span>
-                  <span>· S{r.sucursalId}</span>
-                  <span style={{ color: 'var(--color-danger)' }}>· {r.motivo}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

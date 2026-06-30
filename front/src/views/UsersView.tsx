@@ -8,6 +8,7 @@ import type { UsuarioDTO, SucursalDTO, AsignacionSucursalDTO } from '../api/type
 import { ApiError } from '../api/types';
 import { validarRut, formatearRut } from '../utils/rut';
 import { useDebounce } from '../hooks/useDebounce';
+import { useAuth } from '../context/AuthContext';
 
 function pwStrength(pw: string) {
   let s = 0;
@@ -447,6 +448,7 @@ function UserDetailModal({ user, onClose }: { user: UsuarioDTO; onClose: () => v
 }
 
 export function UsersView() {
+  const { usuario: usuarioActual } = useAuth();
   const [usuarios, setUsuarios] = useState<UsuarioDTO[]>([]);
   const [status, setStatus] = useState<'loading' | 'error' | 'ok'>('loading');
   const [soloActivos, setSoloActivos] = useState(true);
@@ -538,6 +540,8 @@ export function UsersView() {
                   const off = u.estado === 'ACTIVO';
                   const em = DATA.estadoMeta[u.estado] ?? { kind: 'neutral' };
                   const rutDisplay = formatearRut(u.rut, u.dv);
+                  const esYoMismo = usuarioActual?.id === u.id;
+                  const bloquearAutodesactivar = esYoMismo && off;
                   return (
                     <tr key={u.id}>
                       <td className="ds-mono" style={{ color: 'var(--text-secondary)' }}>{rutDisplay}</td>
@@ -556,7 +560,17 @@ export function UsersView() {
                           <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Editar a ${u.nombre} ${u.apellido}`} title="Editar" onClick={() => setEdit(u)}><Icon name="pencil" size={14} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Asignar sucursales a ${u.nombre} ${u.apellido}`} title="Asignar sucursales" onClick={() => setAssign(u)}><Icon name="store" size={14} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" aria-label={`Ver detalle de ${u.nombre} ${u.apellido}`} title="Ver detalle" onClick={() => setDetail(u)}><Icon name="eye" size={14} /></button>
-                          <button className="btn btn-ghost btn-sm" style={{ height: 28, color: off ? 'var(--color-danger)' : 'var(--color-success)' }} onClick={() => setConfirm(u)}>{off ? 'Desactivar' : 'Activar'}</button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{
+                              height: 28,
+                              color: bloquearAutodesactivar ? 'var(--text-disabled)' : (off ? 'var(--color-danger)' : 'var(--color-success)'),
+                              cursor: bloquearAutodesactivar ? 'not-allowed' : undefined,
+                            }}
+                            disabled={bloquearAutodesactivar}
+                            title={bloquearAutodesactivar ? 'No puedes desactivar tu propia cuenta' : undefined}
+                            onClick={() => { if (bloquearAutodesactivar) return; setConfirm(u); }}
+                          >{off ? 'Desactivar' : 'Activar'}</button>
                         </div>
                       </td>
                     </tr>
