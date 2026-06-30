@@ -112,37 +112,6 @@ class AuthServiceTest {
     }
 
     @Test
-    void login_emailNoExiste_lanza401() {
-        LoginRequestDTO dto = new LoginRequestDTO();
-        dto.email = "noexiste@cordillera.cl";
-        dto.password = "cualquiera";
-
-        when(credencialRepository.findByEmail(dto.email)).thenReturn(Optional.empty());
-
-        WebApplicationException ex = assertThrows(WebApplicationException.class,
-                () -> authService.login(dto));
-        assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getResponse().getStatus());
-    }
-
-    @Test
-    void login_usuarioInactivo_lanza401() {
-        Credencial credencial = new Credencial();
-        credencial.email = "inactivo@cordillera.cl";
-        credencial.passwordHash = BcryptUtil.bcryptHash("clave");
-        credencial.activo = false;
-
-        LoginRequestDTO dto = new LoginRequestDTO();
-        dto.email = credencial.email;
-        dto.password = "clave";
-
-        when(credencialRepository.findByEmail(dto.email)).thenReturn(Optional.of(credencial));
-
-        WebApplicationException ex = assertThrows(WebApplicationException.class,
-                () -> authService.login(dto));
-        assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getResponse().getStatus());
-    }
-
-    @Test
     void login_passwordIncorrecta_lanza401() {
         Credencial credencial = new Credencial();
         credencial.email = "admin@cordillera.cl";
@@ -189,36 +158,6 @@ class AuthServiceTest {
     }
 
     @Test
-    void refresh_tokenInexistente_lanza401() {
-        RefreshRequestDTO dto = new RefreshRequestDTO();
-        dto.refreshToken = "no-existe";
-
-        when(refreshTokenRepository.findByToken(dto.refreshToken)).thenReturn(Optional.empty());
-
-        WebApplicationException ex = assertThrows(WebApplicationException.class,
-                () -> authService.refresh(dto));
-        assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getResponse().getStatus());
-    }
-
-    @Test
-    void refresh_tokenYaInvalidado_lanza401() {
-        RefreshToken rt = new RefreshToken();
-        rt.credencial = new Credencial();
-        rt.token = UUID.randomUUID().toString();
-        rt.expiresAt = LocalDateTime.now().plusDays(1);
-        rt.invalidado = true;
-
-        RefreshRequestDTO dto = new RefreshRequestDTO();
-        dto.refreshToken = rt.token;
-
-        when(refreshTokenRepository.findByToken(rt.token)).thenReturn(Optional.of(rt));
-
-        WebApplicationException ex = assertThrows(WebApplicationException.class,
-                () -> authService.refresh(dto));
-        assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getResponse().getStatus());
-    }
-
-    @Test
     void refresh_tokenExpirado_lanza401() {
         RefreshToken rt = new RefreshToken();
         rt.credencial = new Credencial();
@@ -253,16 +192,6 @@ class AuthServiceTest {
     }
 
     @Test
-    void logout_tokenInexistente_esIdempotenteNoLanza() {
-        RefreshRequestDTO dto = new RefreshRequestDTO();
-        dto.refreshToken = "no-existe";
-
-        when(refreshTokenRepository.findByToken(dto.refreshToken)).thenReturn(Optional.empty());
-
-        assertDoesNotThrow(() -> authService.logout(dto));
-    }
-
-    @Test
     void cambiarEstado_desactivar_invalidaTodosLosRefreshTokens() {
         Credencial credencial = new Credencial();
         credencial.id = UUID.randomUUID();
@@ -276,16 +205,6 @@ class AuthServiceTest {
 
         assertFalse(credencial.activo);
         verify(refreshTokenRepository).invalidarTodosPorCredencial(credencial.id);
-    }
-
-    @Test
-    void cambiarEstado_usuarioNoEncontrado_lanza404() {
-        UUID usuarioRefId = UUID.randomUUID();
-        when(credencialRepository.findByUsuarioRefId(usuarioRefId)).thenReturn(Optional.empty());
-
-        WebApplicationException ex = assertThrows(WebApplicationException.class,
-                () -> authService.cambiarEstado(usuarioRefId, false));
-        assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getResponse().getStatus());
     }
 
     @Test

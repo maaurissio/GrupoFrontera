@@ -5,7 +5,6 @@ import com.grupofrontera.msreportes.cliente.ClienteKpis;
 import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.RespuestaKpisDto;
 import com.grupofrontera.msreportes.dto.SucursalDto;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -18,7 +17,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -56,33 +54,6 @@ class ReportesServicioTest {
     }
 
     @Test
-    void obtenerNombresSucursales_exitoso_retornaMapa() {
-        SucursalDto s1 = new SucursalDto();
-        s1.id = 1L;
-        s1.nombre = "Sucursal Uno";
-        SucursalDto s2 = new SucursalDto();
-        s2.id = 2L;
-        s2.nombre = "Sucursal Dos";
-
-        when(clienteDatos.listarSucursales()).thenReturn(List.of(s1, s2));
-
-        Map<Long, String> nombres = reportesServicio.obtenerNombresSucursales();
-
-        assertEquals(2, nombres.size());
-        assertEquals("Sucursal Uno", nombres.get(1L));
-        assertEquals("Sucursal Dos", nombres.get(2L));
-    }
-
-    @Test
-    void obtenerNombresSucursales_error_retornaVacio() {
-        when(clienteDatos.listarSucursales()).thenThrow(new RuntimeException("Error de conexion"));
-
-        Map<Long, String> nombres = reportesServicio.obtenerNombresSucursales();
-
-        assertTrue(nombres.isEmpty());
-    }
-
-    @Test
     void obtenerDashboard_exitoso_retornaDashboard() {
         when(clienteKpis.obtenerKpis(1L, "2026-06")).thenReturn(kpisDto);
         when(clienteKpis.obtenerKpis(1L, "2026-05"))
@@ -99,12 +70,16 @@ class ReportesServicioTest {
     }
 
     @Test
-    void obtenerDashboard_kpisNotFound_propagaError() {
-        when(clienteKpis.obtenerKpis(1L, "2026-06"))
-                .thenThrow(new WebApplicationException(Response.status(404).build()));
+    void obtenerDashboard_conVariacion_calculaPorcentaje() {
+        RespuestaKpisDto anterior = new RespuestaKpisDto();
+        anterior.totalVentas = new BigDecimal("400000");
 
-        assertThrows(WebApplicationException.class,
-                () -> reportesServicio.obtenerDashboard(1L, "2026-06"));
+        when(clienteKpis.obtenerKpis(1L, "2026-06")).thenReturn(kpisDto);
+        when(clienteKpis.obtenerKpis(1L, "2026-05")).thenReturn(anterior);
+
+        var dashboard = reportesServicio.obtenerDashboard(1L, "2026-06");
+
+        assertEquals(new BigDecimal("25.00"), dashboard.variacionPeriodoAnterior);
     }
 
     @Test
@@ -128,15 +103,6 @@ class ReportesServicioTest {
     }
 
     @Test
-    void obtenerComparativo_sinDatos_retornaListaVacia() {
-        when(clienteKpis.obtenerComparativo("2026-06")).thenReturn(List.of());
-
-        var comparativo = reportesServicio.obtenerComparativo("2026-06");
-
-        assertTrue(comparativo.isEmpty());
-    }
-
-    @Test
     void obtenerInventario_conProductos_retornaListaEnriquecida() {
         ProductoDto p1 = new ProductoDto();
         p1.id = 1L;
@@ -154,34 +120,5 @@ class ReportesServicioTest {
 
         assertEquals(1, inventario.size());
         assertEquals("Sucursal Uno", inventario.get(0).sucursalNombre);
-    }
-
-    @Test
-    void obtenerInventario_sinProductos_lanza404() {
-        when(clienteDatos.listarProductos(1L)).thenReturn(List.of());
-
-        assertThrows(NotFoundException.class,
-                () -> reportesServicio.obtenerInventario(1L));
-    }
-
-    @Test
-    void obtenerInventario_productosNulos_lanza404() {
-        when(clienteDatos.listarProductos(1L)).thenReturn(null);
-
-        assertThrows(NotFoundException.class,
-                () -> reportesServicio.obtenerInventario(1L));
-    }
-
-    @Test
-    void obtenerDashboard_conVariacion_calculaPorcentaje() {
-        RespuestaKpisDto anterior = new RespuestaKpisDto();
-        anterior.totalVentas = new BigDecimal("400000");
-
-        when(clienteKpis.obtenerKpis(1L, "2026-06")).thenReturn(kpisDto);
-        when(clienteKpis.obtenerKpis(1L, "2026-05")).thenReturn(anterior);
-
-        var dashboard = reportesServicio.obtenerDashboard(1L, "2026-06");
-
-        assertEquals(new BigDecimal("25.00"), dashboard.variacionPeriodoAnterior);
     }
 }

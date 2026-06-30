@@ -1,78 +1,92 @@
-# ms-datos
+# ms-datos — Catálogo de Productos y Sucursales
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Microservicio que administra el **catálogo de productos** (inventario) y las
+**sucursales** de la cadena. Quarkus 3 / Java 21 / Maven.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## ¿Qué hace?
 
-## Running the application in dev mode
+- CRUD de **productos**: código, nombre, sucursal, categoría, stock, stock mínimo,
+  precio, fecha de actualización de stock y soft delete (`activo`).
+  - Categorías: `ELECTRODOMESTICO, TV, MOVIL, CONSOLA, COMPUTACION, AUDIO, ACCESORIO, OTRO`.
+  - Validación de código único por sucursal (409 si se duplica).
+  - Ajuste de stock con validación (no permite stock negativo).
+  - Importación masiva (insert-only) y filtros por sucursal, categoría, texto y estado.
+- CRUD de **sucursales**: código, nombre, ciudad, coordenadas, dirección, año de apertura
+  y habilitación.
 
-You can run your application in dev mode that enables live coding using:
+IDs numéricos (`Long`). 4 sucursales semilla (Don Raucho/Angol, Jurel San Jose/Coronel,
+Hogar Central/Santiago, TecnoSur/Puerto Montt) + 48 productos.
 
-```shell script
-./mvnw quarkus:dev
+## Endpoints principales
+
+| Método      | Path | Descripción |
+|-------------|------|-------------|
+| GET         | `/productos` | Listar con filtros (`sucursalId`, `categoria`, `q`, `activo`) |
+| GET/POST/PUT| `/productos/{id}` | Detalle / crear / editar |
+| PUT         | `/productos/{id}/estado` | Activar/desactivar |
+| POST        | `/productos/importar` | Importación masiva |
+| GET         | `/productos/categorias` | Catálogo de categorías |
+| GET/POST/PUT| `/sucursales` | CRUD de sucursales |
+
+Puerto HTTP: **8089**.
+
+## Base de datos
+
+| Entorno         | URL JDBC                                          | Usuario / Clave |
+|-----------------|--------------------------------------------------|-----------------|
+| Docker compose  | `jdbc:postgresql://datos-db:5432/datos_db`       | postgres / postgres |
+| Dev local       | `jdbc:postgresql://localhost:5437/grupofrontera` | postgres / postgres |
+
+Configurable por variables `DB_URL`, `DB_USER`, `DB_PASSWORD`.
+
+> Esquema gestionado con **Flyway** (`migrate-at-start`). Las semillas se aplican solas
+> con una BD nueva. **Nunca editar una migración aplicada**: agregar una nueva `V#__*.sql`.
+
+### Conectarse a la BD en Docker
+
+```bash
+docker exec -it gf_datos_db psql -U postgres -d datos_db
+# o desde el host:
+psql -h localhost -p 5437 -U postgres -d datos_db
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+## Ejecutar individualmente
 
-## Packaging and running the application
+```bash
+# Modo dev (requiere la BD arriba)
+docker compose up -d datos-db     # desde la raíz del repo
+cd ms-datos && ./mvnw quarkus:dev
 
-The application can be packaged using:
-
-```shell script
+# Empaquetar y correr
 ./mvnw package
+java -jar target/quarkus-app/quarkus-run.jar
+
+# Solo dentro de Docker
+docker compose up -d --build ms-datos
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+## Variables de entorno (Docker)
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+| Variable                      | Valor por defecto |
+|-------------------------------|-------------------|
+| `QUARKUS_HTTP_PORT`           | 8089 |
+| `QUARKUS_DATASOURCE_JDBC_URL` / `DB_URL` | `jdbc:postgresql://datos-db:5432/datos_db` |
+| `QUARKUS_DATASOURCE_USERNAME` / `DB_USER` | postgres |
+| `QUARKUS_DATASOURCE_PASSWORD` / `DB_PASSWORD` | postgres |
 
-If you want to build an _über-jar_, execute the following command:
+## Documentación de la API (Swagger / OpenAPI)
 
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+Disponible también en Docker (gracias a `quarkus.swagger-ui.always-include=true`):
+
+- Swagger UI → <http://localhost:8089/q/swagger-ui>
+- OpenAPI → <http://localhost:8089/q/openapi>
+
+## Tests
+
+```bash
+./mvnw test
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
-
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
-```
-
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/ms-datos-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Testing
-
-Tests unitarios de la capa Service con `@QuarkusTest` + H2 en memoria. Los métodos estáticos de Panache (`Producto.find()`, `Sucursal.findById()`, etc.) son bytecode-enhanced por Hibernate y no se pueden mockear con `mockStatic`, por eso se usa una BD H2 real en el perfil `%test`.
-
-```shell script
-./mvnw test                  # 24 tests (ProductoServiceTest 19, SucursalServiceTest 5)
-./mvnw test -Dtest=ProductoServiceTest   # test puntual
-```
-
-**Cobertura JaCoCo**: `quarkus-jacoco` extension (70.4% instruction, scoped a `domain/service/*`). El reporte se genera en `target/site/jacoco/`.
-
-Para correr los smoke tests `*ResourceTest` (requieren BD Postgres real):
-```shell script
-./mvnw test -Pdb-tests
-```
-
-## Provided Code
-
-### REST
-
-Easily start your REST Web Services
-
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+`ProductoServiceTest` y `SucursalServiceTest` corren con **H2 en memoria**
+(`@QuarkusTest`), no requieren PostgreSQL. Este servicio usa `quarkus-jacoco` para
+cobertura (el agente JaCoCo estándar es incompatible con el bytecode de Panache).

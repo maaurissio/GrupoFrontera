@@ -40,6 +40,25 @@ Contenedores: `gf_ms_auth`, `gf_ms_users`, `gf_ms_datos`, `gf_ms_kpis`, `gf_ms_r
 
 ---
 
+## Swagger / OpenAPI
+
+Todos los backends (5 microservicios + bff) exponen documentación interactiva en las rutas
+**por defecto de Quarkus**, también en modo packaged/Docker:
+
+- Swagger UI → `http://localhost:<puerto>/q/swagger-ui`
+- OpenAPI → `http://localhost:<puerto>/q/openapi`
+
+Requisitos para que funcione (ya aplicados en todos):
+- Dependencia `quarkus-smallrye-openapi` en el `pom.xml`.
+- `quarkus.swagger-ui.always-include=true` en `application.properties` (sin esto la UI solo
+  existe en `quarkus:dev`, no en producción/Docker).
+- **No** usar `quarkus.swagger-ui.path` custom — se unificó al default `/q/swagger-ui`.
+
+Nota: `GET /q/swagger-ui` devuelve `302` redirigiendo a `/q/swagger-ui/` (trailing slash);
+es el comportamiento normal de Quarkus, no un error. Usa `curl -L` para seguirlo.
+
+---
+
 ## Comandos
 
 ```shell

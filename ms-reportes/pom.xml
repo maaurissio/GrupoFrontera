@@ -60,6 +60,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-openapi</artifactId>
+        </dependency>
         <!-- Generacion de PDF -->
         <dependency>
             <groupId>com.github.librepdf</groupId>
