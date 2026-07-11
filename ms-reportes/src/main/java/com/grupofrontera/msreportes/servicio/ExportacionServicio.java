@@ -2,6 +2,7 @@ package com.grupofrontera.msreportes.servicio;
 
 import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
+import com.grupofrontera.msreportes.dto.VentaDto;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -58,13 +59,14 @@ public class ExportacionServicio {
     // ================================================================
     //  PDF — sucursal individual
     // ================================================================
-    public byte[] exportarPdf(ReporteDashboard dashboard, String nombreSucursal, List<ProductoDto> productos) {
+    public byte[] exportarPdf(ReporteDashboard dashboard, String nombreSucursal, List<ProductoDto> productos, List<VentaDto> ventas) {
         boolean conProductos = productos != null && !productos.isEmpty();
-        LOG.infof("Generando PDF individual sucursal=%d periodo=%s productos=%d",
-                dashboard.sucursalId, dashboard.periodo, conProductos ? productos.size() : 0);
+        boolean conVentas = ventas != null && !ventas.isEmpty();
+        LOG.infof("Generando PDF individual sucursal=%d periodo=%s productos=%d ventas=%d",
+                dashboard.sucursalId, dashboard.periodo, conProductos ? productos.size() : 0, conVentas ? ventas.size() : 0);
         try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
-            // Landscape cuando hay inventario (tabla de 7 cols)
-            Rectangle tamano = conProductos ? PageSize.A4.rotate() : PageSize.A4;
+            // Landscape cuando hay inventario o transacciones (tablas anchas)
+            Rectangle tamano = (conProductos || conVentas) ? PageSize.A4.rotate() : PageSize.A4;
             Document doc = new Document(tamano, 40, 40, 90, 60);
             PdfWriter writer = PdfWriter.getInstance(doc, salida);
             writer.setPageEvent(new PieDePagina());
@@ -126,6 +128,17 @@ public class ExportacionServicio {
                 doc.add(tablaInventario(productos, true));
             }
 
+            // Sección de transacciones detalladas
+            if (conVentas) {
+                doc.add(espacio(18));
+                com.lowagie.text.Paragraph titTx = new com.lowagie.text.Paragraph(
+                        "Detalle de Transacciones — " + nombreSucursal,
+                        FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, AZUL));
+                titTx.setSpacingAfter(6);
+                doc.add(titTx);
+                doc.add(tablaTransacciones(ventas));
+            }
+
             doc.close();
             return salida.toByteArray();
         } catch (Exception e) {
@@ -137,7 +150,7 @@ public class ExportacionServicio {
     // ================================================================
     //  PDF — consolidado de todas las sucursales
     // ================================================================
-    public byte[] exportarPdfComparativo(List<ReporteDashboard> filas, String periodo, Map<Long, String> nombres, List<ProductoDto> productos) {
+    public byte[] exportarPdfComparativo(List<ReporteDashboard> filas, String periodo, Map<Long, String> nombres, List<ProductoDto> productos, List<VentaDto> ventas) {
         LOG.infof("Generando PDF consolidado periodo=%s (%d sucursales)", periodo, filas.size());
         try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A4.rotate(), 40, 40, 90, 60);
@@ -229,6 +242,30 @@ public class ExportacionServicio {
                 }
             }
 
+            // Sección de transacciones por sucursal
+            if (ventas != null && !ventas.isEmpty()) {
+                doc.add(espacio(20));
+                com.lowagie.text.Paragraph titTx = new com.lowagie.text.Paragraph(
+                        "Detalle de Transacciones por Sucursal",
+                        FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, AZUL));
+                titTx.setSpacingAfter(8);
+                doc.add(titTx);
+
+                Map<Long, List<VentaDto>> ventasPorSucursal = ventas.stream()
+                        .collect(Collectors.groupingBy(
+                                v -> v.sucursalRefId == null ? -1L : v.sucursalRefId,
+                                LinkedHashMap::new, Collectors.toList()));
+                for (Map.Entry<Long, List<VentaDto>> grupo : ventasPorSucursal.entrySet()) {
+                    String nomSuc = nombres.getOrDefault(grupo.getKey(), "Sucursal " + grupo.getKey());
+                    com.lowagie.text.Paragraph titSuc = new com.lowagie.text.Paragraph(nomSuc,
+                            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, AZUL));
+                    titSuc.setSpacingBefore(10);
+                    titSuc.setSpacingAfter(4);
+                    doc.add(titSuc);
+                    doc.add(tablaTransacciones(grupo.getValue()));
+                }
+            }
+
             doc.close();
             return salida.toByteArray();
         } catch (Exception e) {
@@ -240,7 +277,7 @@ public class ExportacionServicio {
     // ================================================================
     //  Excel — sucursal individual
     // ================================================================
-    public byte[] exportarExcel(ReporteDashboard dashboard, String nombreSucursal, List<ProductoDto> productos) {
+    public byte[] exportarExcel(ReporteDashboard dashboard, String nombreSucursal, List<ProductoDto> productos, List<VentaDto> ventas) {
         LOG.infof("Generando Excel individual sucursal=%d periodo=%s", dashboard.sucursalId, dashboard.periodo);
         try (Workbook libro = new XSSFWorkbook(); ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
             // --- Hoja 1: KPIs ---
@@ -325,6 +362,45 @@ public class ExportacionServicio {
                 celdaXls(rtot, 6, clp(totValorizado), totalInv);
             }
 
+            // --- Hoja 3: Transacciones ---
+            if (ventas != null && !ventas.isEmpty()) {
+                Sheet hojaTx = libro.createSheet("Transacciones");
+                hojaTx.setColumnWidth(0, 6000);
+                hojaTx.setColumnWidth(1, 4000);
+                hojaTx.setColumnWidth(2, 5000);
+
+                CellStyle tituloTx = estiloTitulo(libro);
+                CellStyle encabTx = estiloEncabezado(libro);
+                CellStyle txtTx = estiloTexto(libro, false);
+                CellStyle txtAltTx = estiloTexto(libro, true);
+                CellStyle totalTx = estiloTotal(libro);
+
+                int rx = 0;
+                Row rtTx = hojaTx.createRow(rx++);
+                rtTx.createCell(0).setCellValue("Transacciones — " + nombreSucursal + " · " + dashboard.periodo);
+                rtTx.getCell(0).setCellStyle(tituloTx);
+                hojaTx.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 2));
+                rx++;
+
+                Row rhTx = hojaTx.createRow(rx++);
+                celdaXls(rhTx, 0, "Fecha/Hora", encabTx);
+                celdaXls(rhTx, 1, "Canal", encabTx);
+                celdaXls(rhTx, 2, "Monto", encabTx);
+
+                BigDecimal totMontoTx = BigDecimal.ZERO;
+                boolean altTx = false;
+                for (VentaDto v : ventas) {
+                    Row row = hojaTx.createRow(rx++);
+                    escribirFilaVenta(row, v, altTx ? txtAltTx : txtTx);
+                    totMontoTx = totMontoTx.add(nz(v.montoTotal));
+                    altTx = !altTx;
+                }
+                Row rtotTx = hojaTx.createRow(rx);
+                celdaXls(rtotTx, 0, "TOTAL (" + ventas.size() + ")", totalTx);
+                celdaXls(rtotTx, 1, "", totalTx);
+                celdaXls(rtotTx, 2, clp(totMontoTx), totalTx);
+            }
+
             libro.write(salida);
             return salida.toByteArray();
         } catch (Exception e) {
@@ -336,7 +412,7 @@ public class ExportacionServicio {
     // ================================================================
     //  Excel — consolidado de todas las sucursales
     // ================================================================
-    public byte[] exportarExcelComparativo(List<ReporteDashboard> filas, String periodo, Map<Long, String> nombres, List<ProductoDto> productos) {
+    public byte[] exportarExcelComparativo(List<ReporteDashboard> filas, String periodo, Map<Long, String> nombres, List<ProductoDto> productos, List<VentaDto> ventas) {
         LOG.infof("Generando Excel consolidado periodo=%s (%d sucursales)", periodo, filas.size());
         try (Workbook libro = new XSSFWorkbook(); ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
             // --- Hoja 1: KPIs comparativo ---
@@ -470,6 +546,73 @@ public class ExportacionServicio {
                 celdaXls(rtotInv, 6, clp(totValorizado), totalInv);
             }
 
+            // --- Hoja 3: Transacciones por sucursal ---
+            if (ventas != null && !ventas.isEmpty()) {
+                Sheet hojaTx = libro.createSheet("Transacciones");
+                hojaTx.setColumnWidth(0, 6000);
+                hojaTx.setColumnWidth(1, 4000);
+                hojaTx.setColumnWidth(2, 5000);
+
+                CellStyle tituloTx = estiloTitulo(libro);
+                CellStyle encabTx = estiloEncabezado(libro);
+                CellStyle txtTx = estiloTexto(libro, false);
+                CellStyle txtAltTx = estiloTexto(libro, true);
+                CellStyle totalTx = estiloTotal(libro);
+                CellStyle subtituloTx = estiloTotal(libro);
+
+                int rx = 0;
+                Row rtTx = hojaTx.createRow(rx++);
+                rtTx.createCell(0).setCellValue("Transacciones Consolidadas — Todas las Sucursales · " + periodo);
+                rtTx.getCell(0).setCellStyle(tituloTx);
+                hojaTx.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 2));
+                rx++;
+
+                Map<Long, List<VentaDto>> ventasPorSucursal = ventas.stream()
+                        .collect(Collectors.groupingBy(
+                                v -> v.sucursalRefId == null ? -1L : v.sucursalRefId,
+                                LinkedHashMap::new, Collectors.toList()));
+
+                BigDecimal totMontoTx = BigDecimal.ZERO;
+                int totCantidadTx = 0;
+
+                for (Map.Entry<Long, List<VentaDto>> grupo : ventasPorSucursal.entrySet()) {
+                    List<VentaDto> items = grupo.getValue();
+                    String nomSuc = nombres.getOrDefault(grupo.getKey(), "Sucursal " + grupo.getKey());
+
+                    Row rsuc = hojaTx.createRow(rx++);
+                    celdaXls(rsuc, 0, nomSuc, subtituloTx);
+                    celdaXls(rsuc, 1, "", subtituloTx);
+                    celdaXls(rsuc, 2, "", subtituloTx);
+
+                    Row rhTx = hojaTx.createRow(rx++);
+                    celdaXls(rhTx, 0, "Fecha/Hora", encabTx);
+                    celdaXls(rhTx, 1, "Canal", encabTx);
+                    celdaXls(rhTx, 2, "Monto", encabTx);
+
+                    BigDecimal grpMonto = BigDecimal.ZERO;
+                    boolean altTx = false;
+                    for (VentaDto v : items) {
+                        Row row = hojaTx.createRow(rx++);
+                        escribirFilaVenta(row, v, altTx ? txtAltTx : txtTx);
+                        grpMonto = grpMonto.add(nz(v.montoTotal));
+                        altTx = !altTx;
+                    }
+                    Row rgt = hojaTx.createRow(rx++);
+                    celdaXls(rgt, 0, "Subtotal " + nomSuc + " (" + items.size() + ")", totalTx);
+                    celdaXls(rgt, 1, "", totalTx);
+                    celdaXls(rgt, 2, clp(grpMonto), totalTx);
+                    rx++; // fila en blanco entre grupos
+
+                    totMontoTx = totMontoTx.add(grpMonto);
+                    totCantidadTx += items.size();
+                }
+
+                Row rtotTx = hojaTx.createRow(rx);
+                celdaXls(rtotTx, 0, "TOTAL GENERAL (" + totCantidadTx + ")", totalTx);
+                celdaXls(rtotTx, 1, "", totalTx);
+                celdaXls(rtotTx, 2, clp(totMontoTx), totalTx);
+            }
+
             libro.write(salida);
             return salida.toByteArray();
         } catch (Exception e) {
@@ -590,6 +733,35 @@ public class ExportacionServicio {
             celdaTotal(t, clp(totValorizado), Element.ALIGN_RIGHT);
         }
         return t;
+    }
+
+    private PdfPTable tablaTransacciones(List<VentaDto> ventas) throws Exception {
+        PdfPTable t = tablaBase(new float[]{1.8f, 1.2f, 1.6f});
+        celdaEncabezado(t, "Fecha/Hora");
+        celdaEncabezado(t, "Canal");
+        celdaEncabezado(t, "Monto");
+
+        BigDecimal totMonto = BigDecimal.ZERO;
+        boolean alt = false;
+        for (VentaDto v : ventas) {
+            Color bg = alt ? FILA_ALT : Color.WHITE;
+            celdaTxt(t, v.fechaHora != null ? v.fechaHora.format(FECHA_FMT) : "", bg, Element.ALIGN_LEFT, Color.BLACK);
+            celdaTxt(t, nvl(v.canal), bg, Element.ALIGN_LEFT, TXT_SUAVE);
+            celdaTxt(t, clp(v.montoTotal), bg, Element.ALIGN_RIGHT, Color.BLACK);
+            totMonto = totMonto.add(nz(v.montoTotal));
+            alt = !alt;
+        }
+
+        celdaTotal(t, "TOTAL (" + ventas.size() + " transacciones)", Element.ALIGN_LEFT);
+        celdaTotal(t, "", Element.ALIGN_CENTER);
+        celdaTotal(t, clp(totMonto), Element.ALIGN_RIGHT);
+        return t;
+    }
+
+    private void escribirFilaVenta(Row row, VentaDto v, CellStyle st) {
+        celdaXls(row, 0, v.fechaHora != null ? v.fechaHora.format(FECHA_FMT) : "", st);
+        celdaXls(row, 1, nvl(v.canal), st);
+        celdaXls(row, 2, clp(v.montoTotal), st);
     }
 
     // ================================================================

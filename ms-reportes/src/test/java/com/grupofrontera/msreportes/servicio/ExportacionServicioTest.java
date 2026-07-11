@@ -2,6 +2,7 @@ package com.grupofrontera.msreportes.servicio;
 
 import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
+import com.grupofrontera.msreportes.dto.VentaDto;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,6 +51,15 @@ class ExportacionServicioTest {
         return p;
     }
 
+    private VentaDto venta(Long sucursalId, String fechaHora, String canal, String monto) {
+        VentaDto v = new VentaDto();
+        v.sucursalRefId = sucursalId;
+        v.fechaHora = LocalDateTime.parse(fechaHora);
+        v.canal = canal;
+        v.montoTotal = new BigDecimal(monto);
+        return v;
+    }
+
     private boolean esPdf(byte[] bytes) {
         return bytes != null && bytes.length > 4
                 && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F';
@@ -64,7 +75,7 @@ class ExportacionServicioTest {
                 producto(1L, "P-001", 1L, "Sucursal Uno", 10, 5, "1000"),
                 producto(2L, "P-002", 1L, "Sucursal Uno", 3, 5, "2000"));
 
-        byte[] pdf = servicio.exportarPdf(dashboard, "Sucursal Uno", productos);
+        byte[] pdf = servicio.exportarPdf(dashboard, "Sucursal Uno", productos, List.of());
 
         assertTrue(esPdf(pdf), "Debe comenzar con la firma %PDF");
         assertTrue(pdf.length > 500);
@@ -75,11 +86,27 @@ class ExportacionServicioTest {
         List<ProductoDto> productos = List.of(
                 producto(1L, "P-001", 1L, "Sucursal Uno", 10, 5, "1000"));
 
-        byte[] xlsx = servicio.exportarExcel(dashboard, "Sucursal Uno", productos);
+        byte[] xlsx = servicio.exportarExcel(dashboard, "Sucursal Uno", productos, List.of());
 
         try (Workbook libro = abrir(xlsx)) {
             assertNotNull(libro.getSheet("KPIs"));
             assertNotNull(libro.getSheet("Inventario"));
+        }
+    }
+
+    @Test
+    void exportarExcel_conVentas_agregaHojaTransaccionesConTotal() throws Exception {
+        List<ProductoDto> productos = List.of();
+        List<VentaDto> ventas = List.of(
+                venta(1L, "2026-06-10T10:30:00", "TIENDA", "15000"),
+                venta(1L, "2026-06-11T16:45:00", "ONLINE", "25000"));
+
+        byte[] xlsx = servicio.exportarExcel(dashboard, "Sucursal Uno", productos, ventas);
+
+        try (Workbook libro = abrir(xlsx)) {
+            Sheet hoja = libro.getSheet("Transacciones");
+            assertNotNull(hoja);
+            assertTrue(contieneTexto(hoja, "TOTAL (2)"));
         }
     }
 

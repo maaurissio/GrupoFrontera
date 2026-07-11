@@ -2,6 +2,7 @@ package com.grupofrontera.msreportes.recurso;
 
 import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
+import com.grupofrontera.msreportes.dto.VentaDto;
 import com.grupofrontera.msreportes.servicio.ExportacionServicio;
 import com.grupofrontera.msreportes.servicio.ReporteGeneradoService;
 import com.grupofrontera.msreportes.servicio.ReportesServicio;
@@ -79,16 +80,17 @@ public class ReportesRecurso {
         List<ProductoDto> productos;
         try { productos = reportesServicio.obtenerInventario(sucursalId); }
         catch (Exception e) { productos = List.of(); }
+        List<VentaDto> ventas = reportesServicio.obtenerVentas(sucursalId, periodo);
 
         String nombreArchivo = "informe_sucursal" + sucursalId + "_" + periodo;
         byte[] contenido;
         String tipo;
         if (fmt.equals("pdf")) {
-            contenido = exportacionServicio.exportarPdf(dashboard, nombreSucursal, productos);
+            contenido = exportacionServicio.exportarPdf(dashboard, nombreSucursal, productos, ventas);
             tipo = "application/pdf";
             nombreArchivo += ".pdf";
         } else {
-            contenido = exportacionServicio.exportarExcel(dashboard, nombreSucursal, productos);
+            contenido = exportacionServicio.exportarExcel(dashboard, nombreSucursal, productos, ventas);
             tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             nombreArchivo += ".xlsx";
         }
@@ -109,16 +111,17 @@ public class ReportesRecurso {
         List<ProductoDto> productos;
         try { productos = reportesServicio.obtenerInventario(null); }
         catch (Exception e) { productos = List.of(); }
+        List<VentaDto> ventas = reportesServicio.obtenerVentas(null, periodo);
 
         String nombreArchivo = "informe_consolidado_" + periodo;
         byte[] contenido;
         String tipo;
         if (fmt.equals("pdf")) {
-            contenido = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres, productos);
+            contenido = exportacionServicio.exportarPdfComparativo(filas, periodo, nombres, productos, ventas);
             tipo = "application/pdf";
             nombreArchivo += ".pdf";
         } else {
-            contenido = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres, productos);
+            contenido = exportacionServicio.exportarExcelComparativo(filas, periodo, nombres, productos, ventas);
             tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             nombreArchivo += ".xlsx";
         }

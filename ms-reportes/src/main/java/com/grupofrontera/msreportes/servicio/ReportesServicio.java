@@ -2,9 +2,12 @@ package com.grupofrontera.msreportes.servicio;
 
 import com.grupofrontera.msreportes.cliente.ClienteDatos;
 import com.grupofrontera.msreportes.cliente.ClienteKpis;
+import com.grupofrontera.msreportes.cliente.ClienteVentas;
 import com.grupofrontera.msreportes.dto.ProductoDto;
 import com.grupofrontera.msreportes.dto.ReporteDashboard;
 import com.grupofrontera.msreportes.dto.RespuestaKpisDto;
+import com.grupofrontera.msreportes.dto.VentaDto;
+import com.grupofrontera.msreportes.dto.VentaPaginaDto;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
@@ -35,6 +38,13 @@ public class ReportesServicio {
     @Inject
     @RestClient
     ClienteDatos clienteDatos;
+
+    @Inject
+    @RestClient
+    ClienteVentas clienteVentas;
+
+    // Suficiente para cubrir el volumen de un solo mes (~500 x sucursal, ~2000 consolidado).
+    private static final int VENTAS_PAGE_SIZE = 5000;
 
     /**
      * Mapa sucursalId → nombre. Si ms-datos no responde, devuelve mapa vacío
@@ -73,6 +83,22 @@ public class ReportesServicio {
             }
         }
         return productos;
+    }
+
+    /**
+     * Trae el resumen de transacciones (boletas) del periodo, opcionalmente filtrado
+     * por sucursal. Si ms-kpis no responde, devuelve lista vacía (el informe continúa
+     * sin esta sección, igual que con el inventario).
+     */
+    public List<VentaDto> obtenerVentas(Long sucursalId, String periodo) {
+        try {
+            VentaPaginaDto pagina = clienteVentas.listar(sucursalId, periodo, periodo, 0, VENTAS_PAGE_SIZE);
+            return pagina != null && pagina.content != null ? pagina.content : List.of();
+        } catch (Exception e) {
+            LOG.warnf("No se pudieron obtener transacciones para sucursalId=%s periodo=%s: %s",
+                    sucursalId, periodo, e.getMessage());
+            return List.of();
+        }
     }
 
     public ReporteDashboard obtenerDashboard(Long sucursalId, String periodo) {
