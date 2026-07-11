@@ -2,8 +2,8 @@
 
 Plataforma de monitoreo para una empresa retail multi-sucursal (Grupo Cordillera).
 Permite gestionar usuarios, roles y sucursales; administrar el catálogo de productos
-e inventario; visualizar KPIs de ventas por sucursal/período; y exportar informes en
-PDF y Excel.
+e inventario; visualizar KPIs de ventas por sucursal/período junto con el detalle de
+cada transacción (boleta); y exportar informes en PDF y Excel.
 
 ## Arquitectura
 
@@ -36,8 +36,8 @@ otra por su ID (ej. `sucursalRefId`), nunca con `@ManyToOne` cruzando servicios.
 | `ms-auth`     | Autenticación JWT (HS384), BCrypt, refresh tokens |
 | `ms-users`    | Usuarios, roles (permisos por módulo) y sucursales |
 | `ms-datos`    | Catálogo de productos y sucursales |
-| `ms-kpis`     | KPIs de ventas/inventario por sucursal y período; consume RabbitMQ |
-| `ms-reportes` | Exportación PDF/Excel (KPIs + inventario), historial de reportes |
+| `ms-kpis`     | KPIs de ventas/inventario por sucursal y período; detalle de transacciones (boletas); consume RabbitMQ |
+| `ms-reportes` | Exportación PDF/Excel (KPIs + inventario + transacciones), historial de reportes |
 | `bff`         | Backend-for-frontend: agrega y orquesta los microservicios |
 | `front`       | SPA React 19 + Vite + TypeScript |
 
@@ -84,6 +84,10 @@ Accesos una vez arriba:
 - Frontend: <http://localhost:5173>
 - BFF: <http://localhost:8090>
 - RabbitMQ UI: <http://localhost:15672> (guest / guest)
+
+El frontend usa rutas relativas hacia el BFF (proxeadas por nginx), así que también
+funciona accediendo desde otra máquina de la red (`http://<ip-del-servidor>:5173`), sin
+necesidad de reconfigurar nada.
 
 ### Documentación de la API (Swagger / OpenAPI)
 

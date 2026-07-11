@@ -11,8 +11,8 @@ Plataforma de monitoreo para empresa retail multi-sucursal (Grupo Cordillera). A
 | `ms-users`    | Usuarios, roles, sucursales (UUID) — **referencia de patrones** |
 | `ms-auth`     | Autenticación JWT HS384, BCrypt, refresh tokens |
 | `ms-datos`    | Catálogo de productos y sucursales (Long id) |
-| `ms-kpis`     | KPIs por sucursal/período, consume RabbitMQ |
-| `ms-reportes` | Exportación PDF + Excel (KPIs + inventario), historial en BD |
+| `ms-kpis`     | KPIs por sucursal/período + transacciones individuales (boletas), consume RabbitMQ |
+| `ms-reportes` | Exportación PDF + Excel (KPIs + inventario + transacciones), historial en BD |
 | `bff`         | Backend-for-frontend, agrega todos los microservicios |
 | `front`       | React 19 + Vite + TypeScript |
 
@@ -140,8 +140,12 @@ Enum de categoría: `ELECTRODOMESTICO, TV, MOVIL, CONSOLA, COMPUTACION, AUDIO, A
 | V1 | Tablas `indicador_ventas`, `indicador_inventario` |
 | V2–V3 | Seed inicial + corrección de montos |
 | `V4__kpis_4_sucursales.sql` | 96 KPIs semilla (4 sucursales × 12 meses) con factor estacional |
+| `V5__venta_y_venta_item.sql` | Tablas `venta` (boleta: sucursal_ref_id, periodo, fecha_hora, monto_total, canal) y `venta_item` (línea: producto_ref_id lógico, codigo/nombre/categoria snapshot, cantidad, precio_unitario, subtotal) |
+| `V6__generar_ventas_historicas.sql` | PL/pgSQL: genera boletas sintéticas para los 96 combos ya sembrados en V4, cuadrando exacto con `total_ventas`/`cantidad_transacciones` de cada fila |
+| `V7__kpis_julio_2026.sql` | Agrega el periodo del mes en curso (2026-07) para las 4 sucursales, mismo patrón determinista de V4 |
+| `V8__generar_ventas_julio_2026.sql` | Boletas para el periodo agregado en V7, mismo método de V6 |
 
-Tablas reales: `indicador_ventas` e `indicador_inventario` (no existe tabla `kpis`).
+Tablas reales: `indicador_ventas`, `indicador_inventario`, `venta`, `venta_item` (no existe tabla `kpis`).
 
 ### Migraciones ms-reportes
 
@@ -170,6 +174,31 @@ Disponible para roles ADMIN y GERENTE (verificado en el front, no en el backend)
 
 ---
 
+## ms-kpis — transacciones individuales (boletas)
+
+Entidades `Venta` (boleta) y `VentaItem` (línea de producto), estilo Active Record igual
+que `IndicadorVentas` — **sin** capa Repository. `VentaItem` guarda un *snapshot* de
+`codigoProducto`/`nombreProducto`/`categoria`/`precioUnitario` al momento de la venta (no
+se re-consulta ms-datos en cada lectura); `productoRefId` es una referencia lógica
+opcional, sin FK real hacia ms-datos.
+
+| Método | Path | Descripción |
+|--------|------|-------------|
+| GET | `/ventas?sucursalId=&periodoDesde=&periodoHasta=&page=&size=` | Lista paginada de boletas. `sucursalId` opcional (omitido = todas), rango de período obligatorio |
+| GET | `/ventas/{id}` | Detalle de una boleta con sus líneas de producto |
+
+**Importante:** `VentaRecurso` está montado en `@Path("/ventas")` — **raíz, no anidado
+bajo `/kpis`**. El bff y ms-reportes usan un REST client dedicado (`VentaClient` /
+`ClienteVentas`) apuntando a `/ventas`, separado del `KpisClient`/`ClienteKpis` que
+apunta a `/kpis`. Meter estos métodos dentro del client de `/kpis` por error hace que las
+llamadas salgan a `/kpis/ventas` (404) — ya pasó una vez, ver historial de commits.
+
+Respuesta de `/ventas` envuelta en `{content, totalElements, totalPages, page, size}` —
+es el único endpoint paginado del repo (no existe otro patrón de paginación previo, se
+introdujo acotado a este caso).
+
+---
+
 ## ms-users — permisos de rol
 
 `Rol` tiene columna `permisos TEXT` que almacena un JSON `Map<String, String>` (módulo → nivel de acceso). Módulos: `dashboard`, `reportes`, `productos`, `usuarios`, `roles`, `sucursales`. Niveles: `sin-acceso`, `lectura`, `edicion`, `total`.
@@ -185,16 +214,17 @@ Disponible para roles ADMIN y GERENTE (verificado en el front, no en el backend)
 
 ## ms-reportes — exportación
 
-`GET /reportes/exportar?formato=pdf|xlsx&periodo=YYYY-MM[&sucursalId=N]` — exporta KPIs **+ inventario de productos** en un solo archivo (informe completo).
+`GET /reportes/exportar?formato=pdf|xlsx&periodo=YYYY-MM[&sucursalId=N]` — exporta KPIs **+ inventario de productos + transacciones** en un solo archivo (informe completo). `periodo` es siempre **un solo mes**, no un rango (a diferencia del selector Desde/Hasta de la pantalla Reportes).
 
-- **PDF individual**: título "Informe de Gestión por Sucursal", orientación landscape, tabla KPIs + sección "Detalle de Inventario" (tarjetas resumen + tabla completa de productos).
-- **PDF consolidado**: tabla comparativa de todas las sucursales + sección de inventario agrupada por sucursal.
-- **Excel individual**: dos pestañas — `KPIs` e `Inventario`.
-- **Excel consolidado**: dos pestañas — `KPIs` (tabla comparativa) e `Inventario` (agrupado por sucursal con subtotales).
+- **PDF individual**: título "Informe de Gestión por Sucursal", orientación landscape, tabla KPIs + sección "Detalle de Inventario" (tarjetas resumen + tabla completa de productos) + sección "Detalle de Transacciones" (fecha/hora, canal, monto).
+- **PDF consolidado**: tabla comparativa de todas las sucursales + sección de inventario agrupada por sucursal + sección de transacciones agrupada por sucursal (con subtotales).
+- **Excel individual**: tres pestañas — `KPIs`, `Inventario` y `Transacciones`.
+- **Excel consolidado**: tres pestañas — `KPIs` (tabla comparativa), `Inventario` y `Transacciones` (ambas agrupadas por sucursal con subtotales).
 - Nombre de archivo: `informe_sucursal{id}_{periodo}.pdf/xlsx` o `informe_consolidado_{periodo}.pdf/xlsx`.
-- Los productos se obtienen de ms-datos vía REST client; si falla, continúa sin ellos (lista vacía).
+- Productos desde ms-datos, transacciones desde ms-kpis (`/ventas`, vía `ClienteVentas`) — ambos por REST client; si cualquiera falla, el informe continúa sin esa sección (lista vacía).
+- Transacciones: **resumen por boleta, sin desglose de productos** (un mes puede tener miles de boletas; con productos el archivo sería enorme). Ver `ExportacionServicio.tablaTransacciones`/`escribirFilaVenta`.
 
-`GET /reportes/inventario?formato=pdf|xlsx[&sucursalId=N]` — exporta **solo** inventario (sin KPIs). Sin cambios respecto a antes.
+`GET /reportes/inventario?formato=pdf|xlsx[&sucursalId=N]` — exporta **solo** inventario (sin KPIs ni transacciones). Sin cambios respecto a antes.
 
 ---
 
@@ -220,6 +250,8 @@ Disponible para roles ADMIN y GERENTE (verificado en el front, no en el backend)
 | GET | /api/bff/kpis | ms-kpis |
 | GET | /api/bff/kpis/comparativo | ms-kpis |
 | PUT | /api/bff/kpis | ms-kpis (edición manual KPIs) |
+| GET | /api/bff/kpis/ventas | ms-kpis (paginado, filtros sucursalId/periodoDesde/periodoHasta) |
+| GET | /api/bff/kpis/ventas/{id} | ms-kpis (detalle de boleta con productos) |
 | GET | /api/bff/productos | ms-datos (filtros: sucursalId, categoria, q, activo) |
 | GET/POST/PUT | /api/bff/productos/{id} | ms-datos |
 | PUT | /api/bff/productos/{id}/estado | ms-datos |
@@ -237,6 +269,7 @@ Disponible para roles ADMIN y GERENTE (verificado en el front, no en el backend)
 - Alta de usuario: usa `HashMap` (no `Map.of` — NPE con null). Lee response con `readEntity()` (no `getEntity()`).
 - ms-users expone asignaciones en `/usuario-sucursales`, no en `/usuarios/{id}/sucursales`.
 - `ReporteGeneradoResource` es un resource separado de `ReporteResource` (paths raíz distintos).
+- `/api/bff/kpis/ventas*` usa un REST client separado (`VentaClient`), no `KpisClient` — ms-kpis monta `VentaRecurso` en `/ventas` (raíz), no bajo `/kpis`.
 
 ---
 
@@ -248,13 +281,13 @@ Disponible para roles ADMIN y GERENTE (verificado en el front, no en el backend)
 
 | Archivo | Funciones |
 |---------|-----------|
-| `types.ts` | `UsuarioDTO`, `SucursalDTO`, `RespuestaKpis`, `ProductoDTO`, `KpisUpdatePayload`, `RolDTO` (con `permisos: Record<string,string>`), `RolCreatePayload` |
-| `client.ts` | fetch wrapper: header Authorization, auto-refresh en 401, AbortSignal |
-| `auth.ts` | `loginApi`, `logoutApi`, `refreshApi` |
+| `types.ts` | `UsuarioDTO`, `SucursalDTO`, `RespuestaKpis`, `ProductoDTO`, `KpisUpdatePayload`, `RolDTO` (con `permisos: Record<string,string>`), `RolCreatePayload`, `VentaResumenDTO`, `VentaDetalleDTO`, `VentaItemDTO`, `VentaPaginaDTO` |
+| `client.ts` | fetch wrapper: header Authorization, auto-refresh en 401, AbortSignal. `BFF_URL` **relativo** (`''`) — ver nota abajo |
+| `auth.ts` | `loginApi`, `logoutApi`, `refreshApi`. Mismo `BFF_URL` relativo que `client.ts` (fetch propio, no usa `apiFetch`) |
 | `usuarios.ts` | CRUD usuarios |
 | `roles.ts` | `listarRoles`, `crearRol` (con permisos) |
 | `sucursales.ts` | CRUD sucursales + `listarUsuariosSucursal` |
-| `kpis.ts` | `obtenerKpis`, `obtenerComparativo`, `actualizarKpis` (PUT) |
+| `kpis.ts` | `obtenerKpis`, `obtenerComparativo`, `actualizarKpis` (PUT), `listarVentas` (paginado), `obtenerVentaDetalle` |
 | `reportes.ts` | `exportarReporte`, `exportarInventario` → blob download |
 | `reportesGuardados.ts` | `listarReportesGuardados`, `eliminarReporteGuardado`, `marcarFavoritoReporte` |
 | `productos.ts` | CRUD productos + `importarProductos` |
@@ -276,13 +309,14 @@ Disponible para roles ADMIN y GERENTE (verificado en el front, no en el backend)
 | `components/Sidebar.tsx` | Nav filtrado por permisos |
 | `components/Chart.tsx` | Gráfico SVG de línea, theme-aware |
 | `components/EditarKpisModal.tsx` | Modal para editar totalVentas, cantidadTransacciones, metaMensual. Campos vacíos = no modificar. Recálculo automático en backend. |
+| `components/DetalleVentasModal.tsx` | Modal de transacciones: vista "lista" (paginada, fecha/hora/sucursal/canal/monto) y vista "boleta" (detalle con productos) en el mismo componente, con botón volver |
 
 ### Vistas
 
 | Vista | Estado |
 |-------|--------|
 | `DashboardView` | KPIs reales, selector sucursal + alcance mes/todos. Botón "Editar KPIs" eliminado de aquí (movido a Reportes). |
-| `ReportesView` | Comparativo real + gráfico con rango Desde/Hasta (`rangoMeses`). Botón "Editar KPIs" para ADMIN/GERENTE al seleccionar sucursal específica. Exporta "Informe PDF/Excel" (KPIs + inventario). |
+| `ReportesView` | Comparativo real + gráfico con rango Desde/Hasta (`rangoMeses`). Botón "Editar KPIs" para ADMIN/GERENTE al seleccionar sucursal específica. Tarjeta "Transacciones" clickeable → `DetalleVentasModal` (no existe tarjeta "Ticket promedio", se quitó). Exporta "Informe PDF/Excel" (KPIs + inventario + transacciones). |
 | `UsersView` | CRUD usuarios, validación RUT, modal edición, asignación sucursales |
 | `RolesView` | Matriz de permisos al crear rol (6 módulos × 4 niveles). Permisos reales desde BD en modal "Ver". |
 | `BranchesView` | CRUD sucursales, mapa MapLibre, tarjeta detalle (Jefe/Ventas/Stock de 3 servicios), ruta OSRM |
@@ -306,6 +340,7 @@ Implementado en 3 capas: `Sidebar` (oculta nav), `App.tsx` (`vistaRestringida`),
 - `apiFetch` tolera 204 y 200 sin body (`parseBody` helper).
 - Todos los `useEffect` de fetch usan `AbortController` y cancelan al desmontar.
 - Mapa usa `latitud`/`longitud` de la sucursal (editables en modal). Fallback a tabla estática `COORDS`.
+- **Nunca hardcodear `http://localhost:8090`** en el front. `BFF_URL` en `client.ts`/`auth.ts` es `''` (ruta relativa); `nginx.conf` la proxea a `bff` en Docker y `vite.config.ts` (`server.proxy`) a `localhost:8090` en `npm run dev`. Si se hardcodea, la app deja de funcionar desde cualquier PC que no sea el que corre el backend (login incluido).
 
 ### Testing
 
