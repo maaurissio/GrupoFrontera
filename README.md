@@ -28,10 +28,7 @@ otra por su ID (ej. `sucursalRefId`), nunca con `@ManyToOne` cruzando servicios.
    ┌───▼───┐ ┌────▼──┐ ┌───▼──┐ ┌───▼──┐ ┌─────▼─────┐
    │auth_db│ │users_db│ │datos_│ │kpis_ │ │reportes_db│
    └───────┘ └────────┘ │  db  │ │ db   │ └───────────┘
-                        └──────┘ └──┬───┘
-                                ┌───▼────┐
-                                │RabbitMQ│  ventas / stock
-                                └────────┘
+                        └──────┘ └──────┘
 ```
 
 | Directorio    | Rol |
