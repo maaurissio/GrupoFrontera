@@ -1,6 +1,9 @@
 import { ApiError, AuthError } from './types';
 
-const BFF_URL = 'http://localhost:8090';
+// Rutas relativas: en dev, Vite las proxea a localhost:8090 (ver vite.config.ts);
+// en Docker, nginx las proxea al servicio `bff` (ver nginx.conf). Así funciona
+// igual sin importar desde qué host/IP se acceda al front.
+const BFF_URL = '';
 
 type TokenProvider = () => string | null;
 type RefreshHandler = () => Promise<string | null>;

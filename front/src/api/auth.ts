@@ -1,6 +1,7 @@
 import type { LoginResponse } from './types';
 
-const BFF_URL = 'http://localhost:8090';
+// Ruta relativa — ver nota en client.ts sobre el proxy en dev/Docker.
+const BFF_URL = '';
 
 export async function loginApi(email: string, password: string): Promise<LoginResponse> {
   const res = await fetch(`${BFF_URL}/api/bff/auth/login`, {
