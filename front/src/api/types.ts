@@ -97,6 +97,45 @@ export interface RespuestaKpis {
   diasSinReposicion: number;
 }
 
+export interface VentaItemDTO {
+  id: number;
+  productoRefId: number | null;
+  codigoProducto: string;
+  nombreProducto: string;
+  categoria: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+
+export interface VentaResumenDTO {
+  id: number;
+  sucursalRefId: number;
+  periodo: string;
+  fechaHora: string;
+  montoTotal: number;
+  canal: string;
+  cantidadItems: number;
+}
+
+export interface VentaDetalleDTO {
+  id: number;
+  sucursalRefId: number;
+  periodo: string;
+  fechaHora: string;
+  montoTotal: number;
+  canal: string;
+  items: VentaItemDTO[];
+}
+
+export interface VentaPaginaDTO {
+  content: VentaResumenDTO[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
 // ---- Productos (catálogo / inventario de ms-datos) ----
 export type CategoriaProducto =
   | 'ELECTRODOMESTICO' | 'TV' | 'MOVIL' | 'CONSOLA'

@@ -3,6 +3,7 @@ import { Icon } from '../components/Icon';
 import { Badge, Panel } from '../components/Primitives';
 import { LineChart } from '../components/Chart';
 import { EditarKpisModal } from '../components/EditarKpisModal';
+import { DetalleVentasModal } from '../components/DetalleVentasModal';
 import { listarSucursales } from '../api/sucursales';
 import { obtenerComparativo } from '../api/kpis';
 import { exportarReporte } from '../api/reportes';
@@ -45,6 +46,7 @@ export function ReportesView() {
   const [chartData, setChartData] = useState<ChartSeries | null>(null);
   const [chartStatus, setChartStatus] = useState<'idle' | 'loading' | 'error' | 'nodata'>('idle');
   const [showEditarKpis, setShowEditarKpis] = useState(false);
+  const [showVentas, setShowVentas] = useState(false);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -144,7 +146,6 @@ export function ReportesView() {
 
   const totalSales = filtered.reduce((s, b) => s + b.sales, 0);
   const totalTx = filtered.reduce((s, b) => s + b.tx, 0);
-  const avgTicket = totalTx > 0 ? Math.round(totalSales / totalTx) : 0;
   const avgMeta = filtered.length > 0 ? Math.round(filtered.reduce((s, b) => s + b.meta, 0) / filtered.length) : 0;
   const totalBajoMin = filtered.reduce((s, b) => s + (b.bajoMin ?? 0), 0);
 
@@ -155,10 +156,9 @@ export function ReportesView() {
     ? (sucMap[sucursalId] ?? `Sucursal #${sucursalId}`)
     : '';
 
-  const kpis = [
+  const kpis: { label: string; value: string; onClick?: () => void }[] = [
     { label: 'Total ventas', value: fmtClp(totalSales) },
-    { label: 'Ticket promedio', value: fmtClp(avgTicket) },
-    { label: 'Transacciones', value: totalTx.toLocaleString('es-CL') },
+    { label: 'Transacciones', value: totalTx.toLocaleString('es-CL'), onClick: () => setShowVentas(true) },
   ];
 
   return (
@@ -235,9 +235,13 @@ export function ReportesView() {
       )}
 
       {/* KPI cards — reflejan el mes "Hasta" seleccionado */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
         {kpis.map(k => (
-          <div key={k.label} className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div key={k.label} className={'card' + (k.onClick ? ' card-hover' : '')}
+            style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12, cursor: k.onClick ? 'pointer' : undefined }}
+            onClick={k.onClick}
+            role={k.onClick ? 'button' : undefined}
+            tabIndex={k.onClick ? 0 : undefined}>
             <span className="kpi-label">{k.label}</span>
             <div className="ds-kpi" style={{ fontSize: 28 }}>{loadingData ? '—' : k.value}</div>
           </div>
@@ -373,6 +377,16 @@ export function ReportesView() {
         kpiActual={kpiActualParaEditar}
         onClose={() => setShowEditarKpis(false)}
         onGuardado={() => fetchComparativo(periodo)}
+      />
+    )}
+
+    {showVentas && (
+      <DetalleVentasModal
+        sucursalId={sucursalId}
+        periodoDesde={periodoDesde}
+        periodoHasta={periodo}
+        sucursales={sucursales}
+        onClose={() => setShowVentas(false)}
       />
     )}
     </>
